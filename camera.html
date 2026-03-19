@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Bowen & Zi Qin — Wedding Camera</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400&family=Jost:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --blush: #f2e0da;
+    --rose: #d4a5a0;
+    --dusty: #c4978f;
+    --sage: #b8c4b1;
+    --cream: #faf6f3;
+    --warm-white: #fff9f7;
+    --text: #4a3f3d;
+    --text-light: #8a7a78;
+    --gold: #c9a96e;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  body {
+    background: var(--cream);
+    font-family: 'Jost', sans-serif;
+    color: var(--text);
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  /* Decorative top border */
+  .top-border {
+    width: 100%;
+    height: 4px;
+    background: linear-gradient(90deg, var(--blush), var(--rose), var(--dusty), var(--sage), var(--rose), var(--blush));
+  }
+
+  header {
+    text-align: center;
+    padding: 2rem 1.5rem 1rem;
+    width: 100%;
+  }
+
+  .wedding-date {
+    font-family: 'Jost', sans-serif;
+    font-size: 0.65rem;
+    font-weight: 500;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: var(--dusty);
+    margin-bottom: 0.5rem;
+  }
+
+  h1 {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 2rem;
+    font-weight: 300;
+    font-style: italic;
+    color: var(--text);
+    line-height: 1.1;
+  }
+
+  h1 span {
+    font-style: normal;
+    font-weight: 400;
+    color: var(--dusty);
+  }
+
+  .subtitle {
+    font-size: 0.72rem;
+    letter-spacing: 0.15em;
+    color: var(--text-light);
+    margin-top: 0.5rem;
+    font-weight: 300;
+  }
+
+  /* Divider */
+  .divider {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 2rem;
+    width: 100%;
+    max-width: 420px;
+  }
+  .divider::before, .divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--rose));
+  }
+  .divider::after { background: linear-gradient(90deg, var(--rose), transparent); }
+  .divider-icon { color: var(--rose); font-size: 0.8rem; }
+
+  /* Main card */
+  .card {
+    width: 100%;
+    max-width: 420px;
+    padding: 0 1.5rem 2rem;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+  }
+
+  /* Camera viewfinder */
+  .viewfinder {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 4/3;
+    border-radius: 16px;
+    overflow: hidden;
+    background: #e8ddd9;
+    cursor: pointer;
+    box-shadow: 0 4px 24px rgba(180,130,120,0.15);
+  }
+
+  .viewfinder video,
+  .viewfinder canvas {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  .viewfinder canvas { display: none; }
+
+  .viewfinder-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: var(--blush);
+    gap: 0.75rem;
+    transition: opacity 0.3s;
+  }
+
+  .viewfinder-overlay.hidden { opacity: 0; pointer-events: none; }
+
+  .camera-icon {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 12px rgba(180,130,120,0.2);
+  }
+
+  .camera-icon svg { width: 26px; height: 26px; stroke: var(--dusty); fill: none; stroke-width: 1.5; }
+
+  .viewfinder-overlay p {
+    font-size: 0.78rem;
+    color: var(--text-light);
+    letter-spacing: 0.05em;
+  }
+
+  /* Corner brackets on viewfinder */
+  .viewfinder::before, .viewfinder::after,
+  .corner-br, .corner-bl {
+    content: '';
+    position: absolute;
+    width: 20px;
+    height: 20px;
+    z-index: 10;
+    pointer-events: none;
+  }
+  .viewfinder::before { top: 10px; left: 10px; border-top: 2px solid rgba(255,255,255,0.7); border-left: 2px solid rgba(255,255,255,0.7); border-radius: 2px 0 0 0; }
+  .viewfinder::after { top: 10px; right: 10px; border-top: 2px solid rgba(255,255,255,0.7); border-right: 2px solid rgba(255,255,255,0.7); border-radius: 0 2px 0 0; }
+
+  .preview-actions {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: space-between;
+    padding: 0.75rem;
+    background: linear-gradient(transparent, rgba(60,40,38,0.4));
+    gap: 0.5rem;
+  }
+
+  .preview-actions.hidden { display: none; }
+
+  .btn-retake {
+    flex: 1;
+    padding: 0.5rem;
+    background: rgba(255,255,255,0.2);
+    border: 1px solid rgba(255,255,255,0.4);
+    color: white;
+    font-family: 'Jost', sans-serif;
+    font-size: 0.72rem;
+    letter-spacing: 0.1em;
+    border-radius: 8px;
+    cursor: pointer;
+    backdrop-filter: blur(4px);
+  }
+
+  /* Shutter button */
+  .shutter-wrap {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 1.5rem;
+  }
+
+  .shutter-btn {
+    width: 68px;
+    height: 68px;
+    border-radius: 50%;
+    background: white;
+    border: 3px solid var(--rose);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 20px rgba(180,130,120,0.3);
+    transition: all 0.15s ease;
+    position: relative;
+  }
+
+  .shutter-btn::after {
+    content: '';
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--blush), var(--rose));
+    transition: all 0.15s ease;
+  }
+
+  .shutter-btn:active { transform: scale(0.93); }
+  .shutter-btn:active::after { background: linear-gradient(135deg, var(--rose), var(--dusty)); }
+
+  .switch-camera-btn {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    background: white;
+    border: 1.5px solid var(--blush);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 8px rgba(180,130,120,0.1);
+  }
+
+  .switch-camera-btn svg { width: 18px; height: 18px; stroke: var(--dusty); fill: none; stroke-width: 1.5; }
+
+  /* Upload from gallery */
+  .upload-alt {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.65rem;
+    border: 1.5px dashed var(--rose);
+    border-radius: 12px;
+    cursor: pointer;
+    color: var(--text-light);
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    transition: all 0.2s;
+    background: transparent;
+    width: 100%;
+    font-family: 'Jost', sans-serif;
+  }
+
+  .upload-alt:hover { background: var(--blush); border-color: var(--dusty); color: var(--text); }
+  .upload-alt svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.5; }
+
+  /* Name + caption inputs */
+  .field-group { display: flex; flex-direction: column; gap: 0.85rem; }
+
+  .field-label {
+    font-size: 0.65rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--dusty);
+    margin-bottom: 0.3rem;
+    font-weight: 500;
+  }
+
+  .field-input {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    border: 1.5px solid #e8ddd9;
+    border-radius: 10px;
+    background: var(--warm-white);
+    font-family: 'Jost', sans-serif;
+    font-size: 0.875rem;
+    color: var(--text);
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  .field-input:focus { border-color: var(--rose); }
+  .field-input::placeholder { color: #c4b0ae; }
+
+  textarea.field-input {
+    resize: none;
+    height: 72px;
+    line-height: 1.5;
+  }
+
+  /* Submit button */
+  .submit-btn {
+    width: 100%;
+    padding: 1rem;
+    background: linear-gradient(135deg, var(--rose), var(--dusty));
+    border: none;
+    border-radius: 12px;
+    color: white;
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 1.1rem;
+    font-style: italic;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    box-shadow: 0 4px 20px rgba(180,130,120,0.35);
+    transition: all 0.2s ease;
+  }
+
+  .submit-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 24px rgba(180,130,120,0.45); }
+  .submit-btn:active { transform: translateY(0); }
+  .submit-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+  /* Status / toast */
+  .toast {
+    position: fixed;
+    bottom: 2rem;
+    left: 50%;
+    transform: translateX(-50%) translateY(100px);
+    background: var(--text);
+    color: white;
+    padding: 0.75rem 1.5rem;
+    border-radius: 100px;
+    font-size: 0.8rem;
+    letter-spacing: 0.05em;
+    transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+    z-index: 100;
+    white-space: nowrap;
+  }
+
+  .toast.show { transform: translateX(-50%) translateY(0); }
+  .toast.success { background: #7a9e7a; }
+  .toast.error { background: #b97070; }
+
+  /* Flash effect */
+  .flash {
+    position: fixed;
+    inset: 0;
+    background: white;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 200;
+    transition: opacity 0.1s;
+  }
+  .flash.active { opacity: 1; }
+
+  /* Loading spinner */
+  .spinner {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(255,255,255,0.4);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    vertical-align: middle;
+    margin-right: 0.4rem;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Progress bar */
+  .progress-bar {
+    height: 3px;
+    background: var(--blush);
+    border-radius: 2px;
+    overflow: hidden;
+    display: none;
+  }
+  .progress-bar.active { display: block; }
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--rose), var(--dusty));
+    border-radius: 2px;
+    transition: width 0.3s ease;
+    width: 0%;
+  }
+
+  /* Hidden file input */
+  #galleryInput { display: none; }
+
+  footer {
+    padding: 1.5rem;
+    text-align: center;
+    font-size: 0.65rem;
+    color: var(--text-light);
+    letter-spacing: 0.1em;
+  }
+
+  /* Blocked screen */
+  .blocked-screen {
+    position: fixed;
+    inset: 0;
+    background: var(--cream);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 999;
+    padding: 2rem;
+    text-align: center;
+  }
+
+  .blocked-screen.hidden { display: none; }
+
+  .blocked-icon {
+    font-size: 2.5rem;
+    margin-bottom: 1.25rem;
+    opacity: 0.4;
+  }
+
+  .blocked-title {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 1.6rem;
+    font-weight: 300;
+    font-style: italic;
+    color: var(--text);
+    margin-bottom: 0.5rem;
+  }
+
+  .blocked-sub {
+    font-size: 0.75rem;
+    color: var(--text-light);
+    letter-spacing: 0.08em;
+    line-height: 1.6;
+    max-width: 260px;
+  }
+
+  .blocked-deco {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin: 1.25rem auto;
+    width: 160px;
+  }
+  .blocked-deco::before, .blocked-deco::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--rose));
+  }
+  .blocked-deco::after { background: linear-gradient(90deg, var(--rose), transparent); }
+  .blocked-deco span { color: var(--rose); font-size: 0.65rem; }
+</style>
+</head>
+<body>
+
+
+<!-- Blocked Screen (shown if token is missing or invalid) -->
+<div class="blocked-screen hidden" id="blockedScreen">
+  <div class="blocked-icon">🔒</div>
+  <div class="blocked-title">Invitation only</div>
+  <div class="blocked-deco"><span>✦</span></div>
+  <p class="blocked-sub">This camera is only accessible via the personalised link shared with you. Please check your invitation.</p>
+</div>
+
+<div class="top-border"></div>
+<div class="flash" id="flash"></div>
+
+<header>
+  <div class="wedding-date">6 · XII · 2026</div>
+  <h1>Bowen <span>&</span> Zi Qin</h1>
+  <p class="subtitle">capture a moment with us</p>
+</header>
+
+<div class="divider"><span class="divider-icon">✦</span></div>
+
+<div class="card">
+  <!-- Viewfinder -->
+  <div class="viewfinder" id="viewfinder">
+    <video id="videoEl" autoplay playsinline muted></video>
+    <canvas id="captureCanvas"></canvas>
+    <div class="viewfinder-overlay" id="viewfinderOverlay">
+      <div class="camera-icon">
+        <svg viewBox="0 0 24 24"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
+      </div>
+      <p>Tap to start camera</p>
+    </div>
+    <div class="preview-actions hidden" id="previewActions">
+      <button class="btn-retake" id="retakeBtn">↺ Retake</button>
+    </div>
+  </div>
+
+  <!-- Shutter -->
+  <div class="shutter-wrap">
+    <div style="width:42px"></div>
+    <button class="shutter-btn" id="shutterBtn" title="Take photo"></button>
+    <button class="switch-camera-btn" id="switchCameraBtn" title="Switch camera">
+      <svg viewBox="0 0 24 24"><path d="M1 4v6h6"/><path d="M23 20v-6h-6"/><path d="M20.49 9A9 9 0 005.64 5.64L1 10M23 14l-4.64 4.36A9 9 0 013.51 15"/></svg>
+    </button>
+  </div>
+
+  <!-- Gallery upload -->
+  <button class="upload-alt" id="galleryBtn">
+    <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+    Upload from gallery
+  </button>
+  <input type="file" id="galleryInput" accept="image/*" multiple>
+
+  <!-- Progress bar -->
+  <div class="progress-bar" id="progressBar">
+    <div class="progress-fill" id="progressFill"></div>
+  </div>
+
+  <!-- Fields -->
+  <div class="field-group">
+    <div>
+      <div class="field-label">Your name</div>
+      <input class="field-input" id="nameInput" type="text" placeholder="e.g. Auntie Susan" maxlength="50">
+    </div>
+    <div>
+      <div class="field-label">Caption <span style="color:#c4b0ae;font-size:0.6rem;">(optional)</span></div>
+      <textarea class="field-input" id="captionInput" placeholder="Write a little message…" maxlength="200"></textarea>
+    </div>
+  </div>
+
+  <!-- Submit -->
+  <button class="submit-btn" id="submitBtn">Share this moment</button>
+</div>
+
+<footer>Paradox Singapore Merchant Court &nbsp;·&nbsp; Dec 6, 2026</footer>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  // ── CONFIG ──────────────────────────────────────────────────────────────
+  const GAS_URL = 'https://script.google.com/macros/s/AKfycbwMTZYvLpvSGnOR-FV1KJn72fQm3eyU5QqFVrSk2ri7jPiPqYcQjqPKKm-omKPWXOKC/exec';
+
+  // SHA-256 hash of your URL token.
+  // Share the camera as: camera.html?token=YOUR_TOKEN
+  // To generate a new hash, run in browser console:
+  //   crypto.subtle.digest('SHA-256', new TextEncoder().encode('your_token'))
+  //     .then(b => console.log([...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')))
+  const TOKEN_HASH = 'a4f8ef8ebedbe2aa7a62e4a3f0ff149a78283fdc1dc9c13f5b214d16a26475e7';
+  // Default token: bzwedding26
+  // ────────────────────────────────────────────────────────────────────────
+
+  // ── Token gate ───────────────────────────────────────────────────────────
+  async function sha256(str) {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+    return [...new Uint8Array(buf)].map(x => x.toString(16).padStart(2, '0')).join('');
+  }
+
+  async function checkToken() {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('token') || '';
+    if (!token) { showBlocked(); return; }
+    const hash = await sha256(token);
+    if (hash !== TOKEN_HASH) { showBlocked(); return; }
+    // Valid — store in sessionStorage so reloads within same tab don't re-check
+    sessionStorage.setItem('cam_token', token);
+  }
+
+  function showBlocked() {
+    document.getElementById('blockedScreen').classList.remove('hidden');
+    // Hide the rest of the page content
+    document.querySelector('.top-border').style.visibility = 'hidden';
+    document.querySelector('header').style.visibility = 'hidden';
+    document.querySelector('.card').style.visibility = 'hidden';
+    document.querySelector('footer').style.visibility = 'hidden';
+  }
+
+  // If already validated this session (e.g. user scrolled away and back),
+  // skip re-hashing but still verify the stored token matches.
+  (async () => {
+    const stored = sessionStorage.getItem('cam_token');
+    if (stored) {
+      const hash = await sha256(stored);
+      if (hash === TOKEN_HASH) return; // still valid
+    }
+    await checkToken();
+  })();
+  // ─────────────────────────────────────────────────────────────────────────
+
+  let stream = null;
+  let facingMode = 'environment';
+  let capturedBlob = null;
+  let cameraActive = false;
+
+  const videoEl = document.getElementById('videoEl');
+  const canvas = document.getElementById('captureCanvas');
+  const ctx = canvas.getContext('2d');
+  const overlay = document.getElementById('viewfinderOverlay');
+  const previewActions = document.getElementById('previewActions');
+  const shutterBtn = document.getElementById('shutterBtn');
+  const switchBtn = document.getElementById('switchCameraBtn');
+  const retakeBtn = document.getElementById('retakeBtn');
+  const galleryBtn = document.getElementById('galleryBtn');
+  const galleryInput = document.getElementById('galleryInput');
+  const submitBtn = document.getElementById('submitBtn');
+  const flash = document.getElementById('flash');
+  const progressBar = document.getElementById('progressBar');
+  const progressFill = document.getElementById('progressFill');
+
+  // Start camera on overlay click
+  overlay.addEventListener('click', startCamera);
+
+  async function startCamera() {
+    try {
+      if (stream) { stream.getTracks().forEach(t => t.stop()); }
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode, width: { ideal: 1920 }, height: { ideal: 1080 } },
+        audio: false
+      });
+      videoEl.srcObject = stream;
+      videoEl.style.display = 'block';
+      canvas.style.display = 'none';
+      overlay.classList.add('hidden');
+      previewActions.classList.add('hidden');
+      capturedBlob = null;
+      cameraActive = true;
+    } catch (e) {
+      showToast('Camera access denied — use gallery upload', 'error');
+    }
+  }
+
+  switchBtn.addEventListener('click', () => {
+    facingMode = facingMode === 'environment' ? 'user' : 'environment';
+    if (cameraActive) startCamera();
+  });
+
+  shutterBtn.addEventListener('click', () => {
+    if (!cameraActive) { startCamera(); return; }
+    // Flash
+    flash.classList.add('active');
+    setTimeout(() => flash.classList.remove('active'), 150);
+
+    canvas.width = videoEl.videoWidth || 1280;
+    canvas.height = videoEl.videoHeight || 720;
+    ctx.drawImage(videoEl, 0, 0);
+    canvas.toBlob(blob => {
+      capturedBlob = blob;
+      videoEl.style.display = 'none';
+      canvas.style.display = 'block';
+      previewActions.classList.remove('hidden');
+      if (stream) { stream.getTracks().forEach(t => t.stop()); }
+      cameraActive = false;
+    }, 'image/jpeg', 0.92);
+  });
+
+  retakeBtn.addEventListener('click', startCamera);
+
+  galleryBtn.addEventListener('click', () => galleryInput.click());
+  galleryInput.addEventListener('change', e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    capturedBlob = file;
+    const url = URL.createObjectURL(file);
+    canvas.style.display = 'none';
+    videoEl.style.display = 'none';
+    // Show preview in canvas
+    const img = new Image();
+    img.onload = () => {
+      canvas.width = img.width; canvas.height = img.height;
+      ctx.drawImage(img, 0, 0);
+      canvas.style.display = 'block';
+      overlay.classList.add('hidden');
+      previewActions.classList.remove('hidden');
+    };
+    img.src = url;
+    if (stream) { stream.getTracks().forEach(t => t.stop()); cameraActive = false; }
+    e.target.value = '';
+  });
+
+  submitBtn.addEventListener('click', async () => {
+    if (!capturedBlob) { showToast('Please take or choose a photo first ✦', 'error'); return; }
+    const name = document.getElementById('nameInput').value.trim();
+    if (!name) { showToast('Please enter your name', 'error'); return; }
+
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<span class="spinner"></span>Uploading…';
+    progressBar.classList.add('active');
+    progressFill.style.width = '20%';
+
+    try {
+      const reader = new FileReader();
+      reader.readAsDataURL(capturedBlob);
+      reader.onload = async () => {
+        progressFill.style.width = '50%';
+        const base64 = reader.result.split(',')[1];
+        const caption = document.getElementById('captionInput').value.trim();
+        const timestamp = new Date().toISOString();
+
+        const payload = { action: 'upload', name, caption, timestamp, imageData: base64, mimeType: capturedBlob.type || 'image/jpeg' };
+
+        progressFill.style.width = '75%';
+        const resp = await fetch(GAS_URL, {
+          method: 'POST',
+          body: JSON.stringify(payload)
+        });
+        const json = await resp.json();
+        progressFill.style.width = '100%';
+
+        if (json.success) {
+          showToast('Photo shared! 🌸', 'success');
+          resetForm();
+        } else {
+          throw new Error(json.error || 'Upload failed');
+        }
+      };
+    } catch (e) {
+      showToast('Upload failed — please try again', 'error');
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = 'Share this moment';
+      progressBar.classList.remove('active');
+      progressFill.style.width = '0%';
+    }
+  });
+
+  function resetForm() {
+    capturedBlob = null;
+    canvas.style.display = 'none';
+    videoEl.style.display = 'block';
+    overlay.classList.remove('hidden');
+    previewActions.classList.add('hidden');
+    document.getElementById('captionInput').value = '';
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = 'Share this moment';
+    setTimeout(() => { progressBar.classList.remove('active'); progressFill.style.width = '0%'; }, 500);
+  }
+
+  function showToast(msg, type = '') {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className = 'toast show ' + type;
+    setTimeout(() => t.className = 'toast', 3000);
+  }
+</script>
+</body>
+</html>

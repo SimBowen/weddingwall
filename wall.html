@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bowen & Zi Qin — Live Photo Wall</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Jost:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --blush: #f2e0da;
+    --rose: #d4a5a0;
+    --dusty: #c4978f;
+    --sage: #b8c4b1;
+    --cream: #faf6f3;
+    --warm: #f7eeea;
+    --text: #4a3f3d;
+    --text-light: #8a7a78;
+    --gold: #c9a96e;
+    --scroll-speed: 35s;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--cream);
+    font-family: 'Jost', sans-serif;
+    color: var(--text);
+    overflow: hidden;
+    height: 100vh;
+    width: 100vw;
+  }
+
+  /* Grain texture overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    opacity: 0.4;
+    pointer-events: none;
+    z-index: 100;
+  }
+
+  /* Full-screen layout */
+  .wall {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    width: 100vw;
+    gap: 0;
+    position: relative;
+  }
+
+  /* Top header strip */
+  .wall-header {
+    position: relative;
+    z-index: 50;
+    text-align: center;
+    padding: 1.5rem 2rem 1rem;
+    flex-shrink: 0;
+    background: linear-gradient(180deg, var(--cream) 70%, transparent);
+  }
+
+  .wedding-label {
+    font-size: 0.62rem;
+    letter-spacing: 0.4em;
+    text-transform: uppercase;
+    color: var(--dusty);
+    font-weight: 500;
+    margin-bottom: 0.3rem;
+  }
+
+  .wall-title {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: clamp(2rem, 5vw, 3.5rem);
+    font-weight: 300;
+    font-style: italic;
+    color: var(--text);
+    line-height: 1;
+  }
+
+  .wall-title .ampersand {
+    color: var(--dusty);
+    font-weight: 400;
+  }
+
+  .wall-tagline {
+    font-size: 0.7rem;
+    letter-spacing: 0.2em;
+    color: var(--text-light);
+    margin-top: 0.4rem;
+    font-weight: 300;
+  }
+
+  /* Decorative line */
+  .deco-line {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    padding: 0.25rem 0;
+    flex-shrink: 0;
+  }
+
+  .deco-line::before, .deco-line::after {
+    content: '';
+    width: 80px;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--rose));
+  }
+  .deco-line::after { background: linear-gradient(90deg, var(--rose), transparent); }
+  .deco-dot { color: var(--rose); font-size: 0.7rem; }
+
+  /* Scroll area — takes remaining height */
+  .scroll-area {
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+    min-height: 0;
+  }
+
+  /* Three rows of tracks */
+  .tracks {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    height: 100%;
+    padding: 0.5rem 0;
+  }
+
+  .track {
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+    min-height: 0;
+  }
+
+  .track-inner {
+    display: flex;
+    gap: 1rem;
+    height: 100%;
+    will-change: transform;
+    animation: scroll-left var(--scroll-speed) linear infinite;
+  }
+
+  .track:nth-child(2) .track-inner {
+    animation-name: scroll-right;
+    animation-duration: calc(var(--scroll-speed) * 1.15);
+  }
+
+  .track:nth-child(3) .track-inner {
+    animation-duration: calc(var(--scroll-speed) * 0.9);
+  }
+
+  @keyframes scroll-left {
+    from { transform: translateX(0); }
+    to { transform: translateX(-50%); }
+  }
+
+  @keyframes scroll-right {
+    from { transform: translateX(-50%); }
+    to { transform: translateX(0); }
+  }
+
+  /* Photo tiles */
+  .photo-tile {
+    flex-shrink: 0;
+    height: 100%;
+    position: relative;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 4px 20px rgba(100,70,65,0.12);
+    cursor: default;
+    transition: transform 0.3s ease;
+  }
+
+  .photo-tile:hover { transform: scale(1.02); z-index: 10; }
+
+  .photo-tile img {
+    height: 100%;
+    width: auto;
+    object-fit: cover;
+    display: block;
+    min-width: 120px;
+  }
+
+  /* Caption overlay */
+  .tile-caption {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: linear-gradient(transparent, rgba(60,40,38,0.65));
+    padding: 2rem 0.85rem 0.75rem;
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+
+  .photo-tile:hover .tile-caption { opacity: 1; }
+
+  .tile-name {
+    font-size: 0.72rem;
+    font-weight: 500;
+    color: rgba(255,255,255,0.9);
+    letter-spacing: 0.05em;
+  }
+
+  .tile-msg {
+    font-size: 0.68rem;
+    color: rgba(255,255,255,0.75);
+    font-style: italic;
+    line-height: 1.4;
+    margin-top: 0.15rem;
+  }
+
+  /* Placeholder tiles (shown when no photos yet) */
+  .placeholder-tile {
+    flex-shrink: 0;
+    height: 100%;
+    aspect-ratio: 4/3;
+    border-radius: 12px;
+    background: var(--blush);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    color: var(--dusty);
+  }
+
+  .placeholder-tile .ph-icon { font-size: 1.5rem; opacity: 0.4; }
+  .placeholder-tile p { font-size: 0.65rem; letter-spacing: 0.1em; opacity: 0.5; }
+
+  /* Bottom footer strip */
+  .wall-footer {
+    position: relative;
+    z-index: 50;
+    text-align: center;
+    padding: 0.75rem 2rem 1.25rem;
+    flex-shrink: 0;
+    background: linear-gradient(0deg, var(--cream) 60%, transparent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1.5rem;
+  }
+
+  .footer-item {
+    font-size: 0.62rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--text-light);
+    font-weight: 300;
+  }
+
+  .footer-dot { color: var(--rose); }
+
+  /* Live indicator */
+  .live-badge {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.62rem;
+    letter-spacing: 0.15em;
+    color: var(--approve, #7a9e7a);
+  }
+
+  .live-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #7a9e7a;
+    animation: pulse-dot 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.8); }
+  }
+
+  /* New photo flash animation */
+  .photo-tile.new-photo {
+    animation: new-pop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  @keyframes new-pop {
+    from { transform: scale(0.85); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+  }
+
+  /* Pause on hover (entire wall) */
+  .scroll-area:hover .track-inner {
+    animation-play-state: paused;
+  }
+
+  /* Photo count display */
+  #photoCount {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 0.85rem;
+    font-style: italic;
+    color: var(--dusty);
+  }
+
+  /* QR hint */
+  .qr-hint {
+    position: fixed;
+    bottom: 1rem;
+    right: 1.5rem;
+    font-size: 0.6rem;
+    letter-spacing: 0.1em;
+    color: var(--text-light);
+    opacity: 0.5;
+    z-index: 200;
+  }
+
+  /* Login gate */
+  .login-gate {
+    position: fixed;
+    inset: 0;
+    background: var(--cream);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 500;
+    padding: 2rem;
+  }
+  .login-gate.hidden { display: none; }
+
+  .login-box {
+    background: #fff9f7;
+    border: 1.5px solid #e8ddd9;
+    border-radius: 24px;
+    padding: 3rem 2.5rem 2.5rem;
+    width: 100%;
+    max-width: 380px;
+    text-align: center;
+    box-shadow: 0 12px 48px rgba(180,130,120,0.12);
+  }
+
+  .login-monogram {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 2.8rem;
+    font-weight: 300;
+    font-style: italic;
+    color: var(--dusty);
+    line-height: 1;
+    margin-bottom: 0.25rem;
+  }
+
+  .login-date {
+    font-size: 0.6rem;
+    letter-spacing: 0.35em;
+    text-transform: uppercase;
+    color: var(--text-light);
+    margin-bottom: 2rem;
+  }
+
+  .login-label {
+    font-size: 0.62rem;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    color: var(--dusty);
+    margin-bottom: 0.6rem;
+    font-weight: 500;
+  }
+
+  .login-input {
+    width: 100%;
+    padding: 0.85rem 1.25rem;
+    border: 1.5px solid #e8ddd9;
+    border-radius: 12px;
+    background: var(--cream);
+    font-family: 'Jost', sans-serif;
+    font-size: 1rem;
+    color: var(--text);
+    outline: none;
+    text-align: center;
+    letter-spacing: 0.25em;
+    margin-bottom: 1rem;
+    transition: border-color 0.2s;
+  }
+  .login-input:focus { border-color: var(--rose); }
+
+  .login-btn {
+    width: 100%;
+    padding: 0.9rem;
+    background: linear-gradient(135deg, var(--rose), var(--dusty));
+    border: none;
+    border-radius: 12px;
+    color: white;
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 1.1rem;
+    font-style: italic;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    box-shadow: 0 4px 20px rgba(180,130,120,0.3);
+    transition: all 0.2s;
+  }
+  .login-btn:hover { transform: translateY(-1px); }
+
+  .login-error {
+    color: #b97070;
+    font-size: 0.72rem;
+    margin-top: 0.75rem;
+    letter-spacing: 0.05em;
+    min-height: 1rem;
+  }
+
+  .login-deco {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-bottom: 1.5rem;
+  }
+  .login-deco::before, .login-deco::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--rose));
+  }
+  .login-deco::after { background: linear-gradient(90deg, var(--rose), transparent); }
+  .login-deco span { color: var(--rose); font-size: 0.65rem; }
+</style>
+</head>
+<body>
+
+
+<!-- Login Gate -->
+<div class="login-gate" id="loginGate">
+  <div class="login-box">
+    <div class="login-monogram">B &amp; ZQ</div>
+    <div class="login-date">6 · XII · 2026</div>
+    <div class="login-deco"><span>✦</span></div>
+    <div class="login-label">Enter passcode to view</div>
+    <input class="login-input" id="wallPassInput" type="password" placeholder="· · · · · · · ·" maxlength="30">
+    <button class="login-btn" id="wallLoginBtn">Enter the wall</button>
+    <div class="login-error" id="wallLoginError"></div>
+  </div>
+</div>
+
+<div class="wall" id="wall">
+  <div class="wall-header">
+    <div class="wedding-label">6 · XII · 2026 &nbsp;·&nbsp; Singapore</div>
+    <div class="wall-title">Bowen <span class="ampersand">&</span> Zi Qin</div>
+    <div class="wall-tagline">our story, your moments</div>
+  </div>
+
+  <div class="deco-line"><span class="deco-dot">✦</span></div>
+
+  <div class="scroll-area" id="scrollArea">
+    <div class="tracks" id="tracks">
+      <div class="track" id="track0"><div class="track-inner" id="inner0"></div></div>
+      <div class="track" id="track1"><div class="track-inner" id="inner1"></div></div>
+      <div class="track" id="track2"><div class="track-inner" id="inner2"></div></div>
+    </div>
+  </div>
+
+  <div class="wall-footer">
+    <span class="footer-item">Paradox Singapore Merchant Court</span>
+    <span class="footer-dot">✦</span>
+    <span id="photoCount">Loading…</span>
+    <span class="footer-dot">✦</span>
+    <div class="live-badge"><div class="live-dot"></div>Live</div>
+  </div>
+</div>
+
+<div class="qr-hint">Hover to pause &nbsp;·&nbsp; Updates every 15s</div>
+
+<script>
+  // ── CONFIG ──────────────────────────────────────────────────────────────
+  const GAS_URL = 'https://script.google.com/macros/s/AKfycbwMTZYvLpvSGnOR-FV1KJn72fQm3eyU5QqFVrSk2ri7jPiPqYcQjqPKKm-omKPWXOKC/exec';
+  const POLL_INTERVAL = 15000; // ms
+
+  // SHA-256 hash of the passcode (same as moderate.html)
+  // To change: run in browser console:
+  //   crypto.subtle.digest('SHA-256', new TextEncoder().encode('your_passcode'))
+  //     .then(b => console.log([...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')))
+  const PASSCODE_HASH = 'f363ff74323b3147ac864ab0661a4a727dc39b8e91d0e27d623859366855b888';
+  // ────────────────────────────────────────────────────────────────────────
+
+  async function sha256(str) {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+    return [...new Uint8Array(buf)].map(x => x.toString(16).padStart(2, '0')).join('');
+  }
+
+  // ── Auth ─────────────────────────────────────────────────────────────────
+  function checkLogin() { return sessionStorage.getItem('wall_auth') === 'true'; }
+
+  document.getElementById('wallLoginBtn').addEventListener('click', doLogin);
+  document.getElementById('wallPassInput').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+
+  async function doLogin() {
+    const val = document.getElementById('wallPassInput').value;
+    const hash = await sha256(val);
+    if (hash === PASSCODE_HASH) {
+      sessionStorage.setItem('wall_auth', 'true');
+      document.getElementById('loginGate').classList.add('hidden');
+      init();
+    } else {
+      document.getElementById('wallLoginError').textContent = 'Incorrect passcode';
+      document.getElementById('wallPassInput').value = '';
+    }
+  }
+
+  if (checkLogin()) {
+    document.getElementById('loginGate').classList.add('hidden');
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
+  let approvedPhotos = [];
+  let seenIds = new Set();
+  let initialized = false;
+
+  // Placeholder data for empty state
+  const placeholderColors = ['#f2e0da','#e8d5d0','#dce8d9','#f5ece7','#e0daf2','#f2e8d5'];
+
+  async function fetchPhotos() {
+    try {
+      const resp = await fetch(`${GAS_URL}?action=wall`);
+      const json = await resp.json();
+      if (json.success && json.photos) {
+        return json.photos;
+      }
+    } catch (e) {}
+    return null;
+  }
+
+  function buildTile(photo) {
+    const tile = document.createElement('div');
+    tile.className = 'photo-tile';
+    tile.dataset.id = photo.id;
+
+    const img = document.createElement('img');
+    img.src = photo.thumbnailUrl || photo.driveUrl;
+    img.alt = photo.name || '';
+    img.loading = 'lazy';
+    tile.appendChild(img);
+
+    if (photo.name || photo.caption) {
+      const cap = document.createElement('div');
+      cap.className = 'tile-caption';
+      if (photo.name) {
+        const nm = document.createElement('div');
+        nm.className = 'tile-name';
+        nm.textContent = photo.name;
+        cap.appendChild(nm);
+      }
+      if (photo.caption) {
+        const msg = document.createElement('div');
+        msg.className = 'tile-msg';
+        msg.textContent = photo.caption;
+        cap.appendChild(msg);
+      }
+      tile.appendChild(cap);
+    }
+
+    return tile;
+  }
+
+  function buildPlaceholder(color) {
+    const tile = document.createElement('div');
+    tile.className = 'placeholder-tile';
+    tile.style.setProperty('--ph-color', color);
+    tile.style.background = color;
+    tile.innerHTML = `<div class="ph-icon">📷</div><p>photos soon</p>`;
+    return tile;
+  }
+
+  function distributeTiles(photos) {
+    // Distribute photos across 3 tracks roughly equally, varying aspect ratios
+    const tracks = [[], [], []];
+    photos.forEach((p, i) => { tracks[i % 3].push(p); });
+    return tracks;
+  }
+
+  function populateTracks(photos) {
+    const inners = [
+      document.getElementById('inner0'),
+      document.getElementById('inner1'),
+      document.getElementById('inner2'),
+    ];
+
+    if (photos.length === 0) {
+      // Show placeholders
+      inners.forEach((inner, ti) => {
+        inner.innerHTML = '';
+        for (let i = 0; i < 8; i++) {
+          const tile = buildPlaceholder(placeholderColors[(ti * 3 + i) % placeholderColors.length]);
+          inner.appendChild(tile);
+        }
+        // Duplicate for seamless scroll
+        Array.from(inner.children).forEach(c => inner.appendChild(c.cloneNode(true)));
+      });
+      document.getElementById('photoCount').textContent = 'Be the first to share!';
+      return;
+    }
+
+    const trackData = distributeTiles(photos);
+
+    inners.forEach((inner, ti) => {
+      inner.innerHTML = '';
+      const trackPhotos = trackData[ti];
+      if (trackPhotos.length === 0) {
+        // fallback: use all photos
+        photos.forEach(p => inner.appendChild(buildTile(p)));
+      } else {
+        trackPhotos.forEach(p => inner.appendChild(buildTile(p)));
+      }
+      // Duplicate for seamless infinite scroll
+      Array.from(inner.children).forEach(c => inner.appendChild(c.cloneNode(true)));
+    });
+
+    const count = photos.length;
+    document.getElementById('photoCount').textContent = `${count} moment${count !== 1 ? 's' : ''} shared`;
+  }
+
+  async function init() {
+    const photos = await fetchPhotos();
+    if (photos !== null) {
+      approvedPhotos = photos;
+      photos.forEach(p => seenIds.add(p.id));
+      populateTracks(approvedPhotos);
+    } else {
+      populateTracks([]);
+    }
+    initialized = true;
+  }
+
+  async function pollForUpdates() {
+    const photos = await fetchPhotos();
+    if (!photos) return;
+
+    const newPhotos = photos.filter(p => !seenIds.has(p.id));
+    if (newPhotos.length > 0) {
+      newPhotos.forEach(p => seenIds.add(p.id));
+      approvedPhotos = photos;
+      // Animate new tiles in
+      populateTracks(approvedPhotos);
+    }
+  }
+
+  if (checkLogin()) init();
+  setInterval(() => { if (checkLogin()) pollForUpdates(); }, POLL_INTERVAL);
+</script>
+</body>
+</html>

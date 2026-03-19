@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Photo Moderation — B&ZQ Wedding</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400&family=Jost:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --blush: #f2e0da;
+    --rose: #d4a5a0;
+    --dusty: #c4978f;
+    --sage: #b8c4b1;
+    --cream: #faf6f3;
+    --warm-white: #fff9f7;
+    --text: #4a3f3d;
+    --text-light: #8a7a78;
+    --gold: #c9a96e;
+    --approve: #7a9e7a;
+    --reject: #b97070;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--cream);
+    font-family: 'Jost', sans-serif;
+    color: var(--text);
+    min-height: 100vh;
+  }
+
+  .top-border {
+    width: 100%;
+    height: 4px;
+    background: linear-gradient(90deg, var(--blush), var(--rose), var(--dusty), var(--sage), var(--rose), var(--blush));
+  }
+
+  /* Login gate */
+  .login-gate {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: calc(100vh - 4px);
+    padding: 2rem;
+  }
+
+  .login-box {
+    background: var(--warm-white);
+    border: 1.5px solid #e8ddd9;
+    border-radius: 20px;
+    padding: 2.5rem 2rem;
+    width: 100%;
+    max-width: 360px;
+    text-align: center;
+    box-shadow: 0 8px 40px rgba(180,130,120,0.1);
+  }
+
+  .login-icon { font-size: 2.5rem; margin-bottom: 1rem; }
+
+  .login-box h2 {
+    font-family: 'Cormorant Garamond', serif;
+    font-weight: 300;
+    font-size: 1.6rem;
+    font-style: italic;
+    margin-bottom: 0.4rem;
+  }
+
+  .login-box p { font-size: 0.78rem; color: var(--text-light); margin-bottom: 1.5rem; letter-spacing: 0.05em; }
+
+  .login-input {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    border: 1.5px solid #e8ddd9;
+    border-radius: 10px;
+    background: var(--cream);
+    font-family: 'Jost', sans-serif;
+    font-size: 0.9rem;
+    color: var(--text);
+    outline: none;
+    text-align: center;
+    letter-spacing: 0.2em;
+    margin-bottom: 1rem;
+    transition: border-color 0.2s;
+  }
+  .login-input:focus { border-color: var(--rose); }
+
+  .login-btn {
+    width: 100%;
+    padding: 0.85rem;
+    background: linear-gradient(135deg, var(--rose), var(--dusty));
+    border: none;
+    border-radius: 10px;
+    color: white;
+    font-family: 'Jost', sans-serif;
+    font-size: 0.85rem;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    cursor: pointer;
+  }
+
+  .login-error { color: var(--reject); font-size: 0.75rem; margin-top: 0.75rem; }
+
+  /* Main app */
+  .app { display: none; }
+  .app.active { display: block; }
+
+  /* Header */
+  header {
+    background: var(--warm-white);
+    border-bottom: 1px solid #e8ddd9;
+    padding: 1rem 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    position: sticky;
+    top: 0;
+    z-index: 50;
+  }
+
+  .header-title {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 1.25rem;
+    font-weight: 300;
+    font-style: italic;
+  }
+
+  .header-stats {
+    display: flex;
+    gap: 0.75rem;
+    flex-shrink: 0;
+  }
+
+  .stat-badge {
+    font-size: 0.68rem;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    padding: 0.3rem 0.7rem;
+    border-radius: 100px;
+  }
+
+  .badge-pending { background: #fef3e8; color: #c9853a; }
+  .badge-approved { background: #edf5ed; color: var(--approve); }
+  .badge-rejected { background: #fdeaea; color: var(--reject); }
+
+  /* Tabs */
+  .tabs {
+    display: flex;
+    background: var(--warm-white);
+    border-bottom: 1px solid #e8ddd9;
+    padding: 0 1.5rem;
+  }
+
+  .tab {
+    flex: 1;
+    padding: 0.85rem 0.5rem;
+    font-size: 0.72rem;
+    font-weight: 500;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--text-light);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    text-align: center;
+    transition: all 0.2s;
+  }
+
+  .tab.active { color: var(--dusty); border-bottom-color: var(--dusty); }
+
+  /* Grid */
+  .grid-container {
+    padding: 1.5rem;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1.25rem;
+  }
+
+  .photo-card {
+    background: var(--warm-white);
+    border: 1.5px solid #e8ddd9;
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 2px 12px rgba(180,130,120,0.08);
+    transition: box-shadow 0.2s;
+  }
+
+  .photo-card:hover { box-shadow: 0 6px 24px rgba(180,130,120,0.15); }
+
+  .photo-card.approved { border-color: var(--approve); }
+  .photo-card.rejected { border-color: var(--reject); opacity: 0.7; }
+
+  .card-img {
+    width: 100%;
+    aspect-ratio: 4/3;
+    object-fit: cover;
+    display: block;
+    cursor: pointer;
+  }
+
+  .card-body { padding: 0.9rem; }
+
+  .card-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 0.5rem;
+  }
+
+  .card-name {
+    font-weight: 500;
+    font-size: 0.85rem;
+  }
+
+  .card-time {
+    font-size: 0.65rem;
+    color: var(--text-light);
+    letter-spacing: 0.05em;
+  }
+
+  .card-caption {
+    font-size: 0.8rem;
+    color: var(--text-light);
+    font-style: italic;
+    margin-bottom: 0.75rem;
+    line-height: 1.5;
+  }
+
+  .card-caption.empty { color: #c4b0ae; }
+
+  /* Caption edit */
+  .caption-edit {
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    border: 1.5px solid #e8ddd9;
+    border-radius: 8px;
+    background: var(--cream);
+    font-family: 'Jost', sans-serif;
+    font-size: 0.8rem;
+    color: var(--text);
+    outline: none;
+    resize: none;
+    height: 60px;
+    margin-bottom: 0.75rem;
+    display: none;
+    transition: border-color 0.2s;
+  }
+  .caption-edit:focus { border-color: var(--rose); }
+  .caption-edit.visible { display: block; }
+
+  /* Card actions */
+  .card-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .action-btn {
+    flex: 1;
+    min-width: 80px;
+    padding: 0.55rem 0.5rem;
+    border: none;
+    border-radius: 8px;
+    font-family: 'Jost', sans-serif;
+    font-size: 0.72rem;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .btn-approve {
+    background: #edf5ed;
+    color: var(--approve);
+  }
+  .btn-approve:hover { background: var(--approve); color: white; }
+  .btn-approve.active { background: var(--approve); color: white; }
+
+  .btn-reject {
+    background: #fdeaea;
+    color: var(--reject);
+  }
+  .btn-reject:hover { background: var(--reject); color: white; }
+  .btn-reject.active { background: var(--reject); color: white; }
+
+  .btn-edit {
+    background: var(--blush);
+    color: var(--dusty);
+  }
+  .btn-edit:hover { background: var(--dusty); color: white; }
+
+  /* Status indicator on card */
+  .card-status {
+    display: inline-block;
+    font-size: 0.62rem;
+    font-weight: 600;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    padding: 0.2rem 0.6rem;
+    border-radius: 100px;
+    margin-bottom: 0.5rem;
+  }
+
+  .status-pending { background: #fef3e8; color: #c9853a; }
+  .status-approved { background: #edf5ed; color: var(--approve); }
+  .status-rejected { background: #fdeaea; color: var(--reject); }
+
+  /* Empty state */
+  .empty-state {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 4rem 2rem;
+    color: var(--text-light);
+  }
+
+  .empty-state .empty-icon { font-size: 2.5rem; margin-bottom: 1rem; opacity: 0.5; }
+  .empty-state p { font-size: 0.85rem; letter-spacing: 0.05em; }
+
+  /* Refresh button */
+  .refresh-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.5rem 1rem;
+    background: var(--blush);
+    border: none;
+    border-radius: 100px;
+    font-family: 'Jost', sans-serif;
+    font-size: 0.72rem;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    color: var(--dusty);
+    cursor: pointer;
+    transition: all 0.2s;
+    flex-shrink: 0;
+  }
+  .refresh-btn:hover { background: var(--rose); color: white; }
+  .refresh-btn svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2; }
+  .refresh-btn.spinning svg { animation: spin 0.7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Lightbox */
+  .lightbox {
+    position: fixed;
+    inset: 0;
+    background: rgba(60,40,38,0.85);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 200;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s;
+    padding: 2rem;
+  }
+  .lightbox.active { opacity: 1; pointer-events: all; }
+  .lightbox img {
+    max-width: 100%;
+    max-height: 85vh;
+    border-radius: 12px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+  }
+  .lightbox-close {
+    position: absolute;
+    top: 1.5rem;
+    right: 1.5rem;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.15);
+    border: none;
+    color: white;
+    font-size: 1.2rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Toast */
+  .toast {
+    position: fixed;
+    bottom: 2rem;
+    left: 50%;
+    transform: translateX(-50%) translateY(100px);
+    background: var(--text);
+    color: white;
+    padding: 0.75rem 1.5rem;
+    border-radius: 100px;
+    font-size: 0.8rem;
+    letter-spacing: 0.05em;
+    transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+    z-index: 300;
+    white-space: nowrap;
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+  .toast.success { background: #7a9e7a; }
+  .toast.error { background: #b97070; }
+
+  /* Auto-refresh indicator */
+  .auto-refresh {
+    font-size: 0.65rem;
+    color: var(--text-light);
+    letter-spacing: 0.05em;
+    display: none;
+  }
+</style>
+</head>
+<body>
+
+<div class="top-border"></div>
+
+<!-- Login Gate -->
+<div class="login-gate" id="loginGate">
+  <div class="login-box">
+    <div class="login-icon">🌸</div>
+    <h2>Moderation Panel</h2>
+    <p>For groomsmen & wedding helpers only</p>
+    <input class="login-input" id="passInput" type="password" placeholder="Enter passcode" maxlength="20">
+    <button class="login-btn" id="loginBtn">Enter</button>
+    <div class="login-error" id="loginError"></div>
+  </div>
+</div>
+
+<!-- Main App -->
+<div class="app" id="mainApp">
+  <header>
+    <div>
+      <div class="header-title">Photo Moderation</div>
+    </div>
+    <div class="header-stats">
+      <span class="stat-badge badge-pending" id="statPending">0 pending</span>
+      <span class="stat-badge badge-approved" id="statApproved">0 approved</span>
+    </div>
+    <button class="refresh-btn" id="refreshBtn">
+      <svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+      Refresh
+    </button>
+  </header>
+
+  <div class="tabs">
+    <div class="tab active" data-tab="pending">Pending</div>
+    <div class="tab" data-tab="approved">Approved</div>
+    <div class="tab" data-tab="rejected">Rejected</div>
+    <div class="tab" data-tab="all">All</div>
+  </div>
+
+  <div class="grid-container" id="photoGrid">
+    <div class="empty-state">
+      <div class="empty-icon">📷</div>
+      <p>Loading photos…</p>
+    </div>
+  </div>
+</div>
+
+<!-- Lightbox -->
+<div class="lightbox" id="lightbox">
+  <button class="lightbox-close" id="lightboxClose">✕</button>
+  <img id="lightboxImg" src="" alt="">
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  // ── CONFIG ──────────────────────────────────────────────────────────────
+  const GAS_URL = 'https://script.google.com/macros/s/AKfycbwMTZYvLpvSGnOR-FV1KJn72fQm3eyU5QqFVrSk2ri7jPiPqYcQjqPKKm-omKPWXOKC/exec'; // Replace after deploying GAS
+
+  // SHA-256 hash of the passcode — the plaintext password is never stored here.
+  // To change the passcode:
+  //   1. Run this in your browser console: 
+  //      crypto.subtle.digest('SHA-256', new TextEncoder().encode('your_new_passcode'))
+  //        .then(b => console.log([...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')))
+  //   2. Replace the hash string below with the output.
+  const PASSCODE_HASH = 'f363ff74323b3147ac864ab0661a4a727dc39b8e91d0e27d623859366855b888';
+  // ────────────────────────────────────────────────────────────────────────
+
+  async function sha256(str) {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+    return [...new Uint8Array(buf)].map(x => x.toString(16).padStart(2, '0')).join('');
+  }
+
+  let allPhotos = [];
+  let currentTab = 'pending';
+
+  // Login
+  function checkLogin() { return sessionStorage.getItem('mod_auth') === 'true'; }
+
+  document.getElementById('loginBtn').addEventListener('click', doLogin);
+  document.getElementById('passInput').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+
+  async function doLogin() {
+    const val = document.getElementById('passInput').value;
+    const hash = await sha256(val);
+    if (hash === PASSCODE_HASH) {
+      sessionStorage.setItem('mod_auth', 'true');
+      document.getElementById('loginGate').style.display = 'none';
+      document.getElementById('mainApp').classList.add('active');
+      loadPhotos();
+    } else {
+      document.getElementById('loginError').textContent = 'Incorrect passcode';
+      document.getElementById('passInput').value = '';
+    }
+  }
+
+  if (checkLogin()) {
+    document.getElementById('loginGate').style.display = 'none';
+    document.getElementById('mainApp').classList.add('active');
+    loadPhotos();
+  }
+
+  // Tabs
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      currentTab = tab.dataset.tab;
+      renderPhotos();
+    });
+  });
+
+  // Refresh
+  const refreshBtn = document.getElementById('refreshBtn');
+  refreshBtn.addEventListener('click', loadPhotos);
+
+  // Auto-refresh every 30s
+  setInterval(() => { if (checkLogin()) loadPhotos(true); }, 30000);
+
+  async function loadPhotos(silent = false) {
+    if (!silent) {
+      refreshBtn.classList.add('spinning');
+    }
+    try {
+      const resp = await fetch(`${GAS_URL}?action=list`);
+      const json = await resp.json();
+      if (json.success) {
+        allPhotos = json.photos || [];
+        renderPhotos();
+        updateStats();
+      }
+    } catch (e) {
+      if (!silent) showToast('Failed to load photos', 'error');
+    } finally {
+      refreshBtn.classList.remove('spinning');
+    }
+  }
+
+  function updateStats() {
+    const pending = allPhotos.filter(p => p.status === 'pending').length;
+    const approved = allPhotos.filter(p => p.status === 'approved').length;
+    document.getElementById('statPending').textContent = `${pending} pending`;
+    document.getElementById('statApproved').textContent = `${approved} approved`;
+  }
+
+  function renderPhotos() {
+    const grid = document.getElementById('photoGrid');
+    let filtered = allPhotos;
+    if (currentTab !== 'all') filtered = allPhotos.filter(p => p.status === currentTab);
+
+    if (filtered.length === 0) {
+      grid.innerHTML = `<div class="empty-state"><div class="empty-icon">✦</div><p>No ${currentTab === 'all' ? '' : currentTab + ' '}photos yet</p></div>`;
+      return;
+    }
+
+    grid.innerHTML = '';
+    filtered.forEach(photo => grid.appendChild(createCard(photo)));
+  }
+
+  function createCard(photo) {
+    const card = document.createElement('div');
+    card.className = `photo-card ${photo.status !== 'pending' ? photo.status : ''}`;
+    card.dataset.id = photo.id;
+
+    const time = photo.timestamp ? new Date(photo.timestamp).toLocaleString('en-SG', { dateStyle: 'short', timeStyle: 'short' }) : '';
+    const captionText = photo.caption || '';
+
+    card.innerHTML = `
+      <img class="card-img" src="${photo.thumbnailUrl || photo.driveUrl}" alt="" loading="lazy">
+      <div class="card-body">
+        <div class="card-meta">
+          <span class="card-name">${escHtml(photo.name)}</span>
+          <span class="card-time">${time}</span>
+        </div>
+        <span class="card-status status-${photo.status}">${photo.status}</span>
+        <div class="card-caption ${captionText ? '' : 'empty'}">${captionText ? escHtml(captionText) : 'No caption'}</div>
+        <textarea class="caption-edit" placeholder="Edit caption…" maxlength="200">${escHtml(captionText)}</textarea>
+        <div class="card-actions">
+          <button class="action-btn btn-approve ${photo.status === 'approved' ? 'active' : ''}" data-action="approve">✓ Approve</button>
+          <button class="action-btn btn-reject ${photo.status === 'rejected' ? 'active' : ''}" data-action="reject">✕ Reject</button>
+          <button class="action-btn btn-edit" data-action="edit">✎ Edit</button>
+        </div>
+      </div>
+    `;
+
+    // Image click = lightbox
+    card.querySelector('.card-img').addEventListener('click', () => openLightbox(photo.driveUrl || photo.thumbnailUrl));
+
+    // Action buttons
+    card.querySelectorAll('.action-btn').forEach(btn => {
+      btn.addEventListener('click', () => handleAction(btn.dataset.action, photo.id, card));
+    });
+
+    return card;
+  }
+
+  async function handleAction(action, id, card) {
+    if (action === 'edit') {
+      const edit = card.querySelector('.caption-edit');
+      const display = card.querySelector('.card-caption');
+      if (edit.classList.contains('visible')) {
+        // Save
+        const newCaption = edit.value.trim();
+        try {
+          const resp = await fetch(GAS_URL, {
+            method: 'POST',
+            body: JSON.stringify({ action: 'updateCaption', id, caption: newCaption })
+          });
+          const json = await resp.json();
+          if (json.success) {
+            display.textContent = newCaption || 'No caption';
+            display.className = `card-caption ${newCaption ? '' : 'empty'}`;
+            const photo = allPhotos.find(p => p.id === id);
+            if (photo) photo.caption = newCaption;
+            showToast('Caption updated', 'success');
+          }
+        } catch { showToast('Failed to update', 'error'); }
+        edit.classList.remove('visible');
+        card.querySelector('.btn-edit').textContent = '✎ Edit';
+      } else {
+        edit.classList.add('visible');
+        card.querySelector('.btn-edit').textContent = '✓ Save';
+        edit.focus();
+      }
+      return;
+    }
+
+    const newStatus = action === 'approve' ? 'approved' : 'rejected';
+    try {
+      const resp = await fetch(GAS_URL, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'moderate', id, status: newStatus })
+      });
+      const json = await resp.json();
+      if (json.success) {
+        const photo = allPhotos.find(p => p.id === id);
+        if (photo) photo.status = newStatus;
+        showToast(`Photo ${newStatus}`, 'success');
+        renderPhotos();
+        updateStats();
+      } else { throw new Error(); }
+    } catch { showToast('Action failed', 'error'); }
+  }
+
+  // Lightbox
+  document.getElementById('lightboxClose').addEventListener('click', () => document.getElementById('lightbox').classList.remove('active'));
+  document.getElementById('lightbox').addEventListener('click', e => { if (e.target === e.currentTarget) e.currentTarget.classList.remove('active'); });
+
+  function openLightbox(url) {
+    document.getElementById('lightboxImg').src = url;
+    document.getElementById('lightbox').classList.add('active');
+  }
+
+  function escHtml(str) {
+    if (!str) return '';
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function showToast(msg, type = '') {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className = 'toast show ' + type;
+    setTimeout(() => t.className = 'toast', 3000);
+  }
+</script>
+</body>
+</html>
