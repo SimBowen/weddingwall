@@ -392,6 +392,16 @@
 
   #galleryInput { display: none; }
 
+  .video-disclaimer {
+    font-size: 0.68rem;
+    color: var(--text-light);
+    text-align: center;
+    padding: 0.5rem 1.5rem 0;
+    letter-spacing: 0.03em;
+    font-style: italic;
+    line-height: 1.5;
+  }
+
   /* Multi-photo thumbnail strip */
   .thumb-strip-wrap {
     position: relative;
@@ -702,6 +712,11 @@
       </button>
     </div>
 
+    <!-- Video disclaimer -->
+    <p class="video-disclaimer" id="videoDisclaimer">
+      Preview may appear black — your video has been captured and is ready to share.
+    </p>
+
     <!-- Multi-photo thumbnail strip (gallery uploads) -->
     <div class="thumb-strip-wrap" id="thumbStripWrap">
       <div class="thumb-strip" id="thumbStrip"></div>
@@ -959,7 +974,51 @@ const mimeType = MediaRecorder.isTypeSupported('video/mp4')
 
   // ── Gallery upload ────────────────────────────────────────
   document.getElementById('galleryBtn').addEventListener('click', () => {
-    document.getElementById('galleryInput').click();
+    // Read EXIF orientation tag from image file bytes.
+  // Returns 1-8 per EXIF spec, or 1 (normal) if not found.
+  function getExifOrientation(file) {
+    return new Promise(resolve => {
+      const reader = new FileReader();
+      reader.onload = e => {
+        const view = new DataView(e.target.result);
+        if (view.getUint16(0, false) !== 0xFFD8) { resolve(1); return; }
+        const len = view.byteLength;
+        let offset = 2;
+        while (offset < len) {
+          if (view.getUint16(offset, false) === 0xFFE1) {
+            offset += 4;
+            if (view.getUint32(offset, false) !== 0x45786966) { resolve(1); return; }
+            const little = view.getUint16(offset += 6, false) === 0x4949;
+            offset += view.getUint32(offset + 4, little);
+            const tags = view.getUint16(offset, little);
+            offset += 2;
+            for (let i = 0; i < tags; i++) {
+              if (view.getUint16(offset + (i * 12), little) === 0x0112) {
+                resolve(view.getUint16(offset + (i * 12) + 8, little)); return;
+              }
+            }
+          }
+          offset += 2 + view.getUint16(offset + 2, false);
+        }
+        resolve(1);
+      };
+      reader.onerror = () => resolve(1);
+      // Only need first 64kb for EXIF
+      reader.readAsArrayBuffer(file.slice(0, 65536));
+    });
+  }
+
+  // Returns true if the image is portrait after accounting for EXIF rotation.
+  // Orientations 5,6,7,8 mean the camera was rotated 90/270° — swap w/h.
+  async function getIsPortrait(file, img) {
+    const orientation = await getExifOrientation(file);
+    const rotated = orientation >= 5; // 5,6,7,8 = 90° or 270° rotation
+    const pixelPortrait = img.naturalHeight > img.naturalWidth;
+    // If rotated, swap the axis interpretation
+    return rotated ? !pixelPortrait : pixelPortrait;
+  }
+
+  document.getElementById('galleryInput').click();
   });
 
   document.getElementById('galleryInput').addEventListener('change', e => {
@@ -985,9 +1044,10 @@ const mimeType = MediaRecorder.isTypeSupported('video/mp4')
         vid.onerror = () => showSinglePreview(url, false, true);
       } else {
         const img = new Image();
-        img.onload = () => {
-          capturedFiles = [{ blob: file, isPortrait: img.naturalHeight > img.naturalWidth, isVideo: false }];
-          showSinglePreview(url, capturedFiles[0].isPortrait, false);
+        img.onload = async () => {
+          const isPortrait = await getIsPortrait(file, img);
+          capturedFiles = [{ blob: file, isPortrait, isVideo: false }];
+          showSinglePreview(url, isPortrait, false);
         };
         img.src = url;
       }
@@ -1003,7 +1063,10 @@ const mimeType = MediaRecorder.isTypeSupported('video/mp4')
           vid.onerror = () => resolve({ blob: file, isPortrait: false, url, isVideo: true });
         } else {
           const img = new Image();
-          img.onload = () => resolve({ blob: file, isPortrait: img.naturalHeight > img.naturalWidth, url, isVideo: false });
+          img.onload = async () => {
+            const isPortrait = await getIsPortrait(file, img);
+            resolve({ blob: file, isPortrait, url, isVideo: false });
+          };
           img.src = url;
         }
       }))).then(results => {
@@ -1023,9 +1086,11 @@ const mimeType = MediaRecorder.isTypeSupported('video/mp4')
 
     const img   = document.getElementById('previewImg');
     const badge = document.getElementById('videoBadge');
+    const disclaimer = document.getElementById('videoDisclaimer');
     if (isVideo) {
       badge.style.display = 'flex';
       document.getElementById('previewWrap').style.background = '#1a1414';
+      if (disclaimer) disclaimer.style.display = 'block';
       if (videoThumbUrl) {
         img.src = videoThumbUrl;
         img.style.display = 'block';
@@ -1034,6 +1099,7 @@ const mimeType = MediaRecorder.isTypeSupported('video/mp4')
       }
     } else {
       document.getElementById('previewWrap').style.background = '';
+      if (disclaimer) disclaimer.style.display = 'none';
       badge.style.display = 'none';
       img.src = objectUrl;
       img.style.display = 'block';
@@ -1206,6 +1272,8 @@ const mimeType = MediaRecorder.isTypeSupported('video/mp4')
     document.getElementById('previewWrap').style.display = '';
     const resetVid = document.getElementById('previewVideo');
     if (resetVid) resetVid.remove();
+    document.getElementById('videoDisclaimer').classList.remove('visible');
+    if (disc) disc.style.display = 'none';
     document.getElementById('previewImg').style.display = 'block';
     document.getElementById('videoBadge').style.display = 'none';
     showScreen('cameraScreen');
