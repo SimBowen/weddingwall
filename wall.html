@@ -136,45 +136,25 @@
   }
 
   .track-inner {
-    display: flex;
-    gap: 1rem;
+    /* JS-driven scroll — tiles are absolutely positioned within the track */
+    position: relative;
     height: 100%;
-    will-change: transform;
-    animation: scroll-left var(--scroll-speed) linear infinite;
-  }
-
-  .track:nth-child(2) .track-inner {
-    animation-name: scroll-right;
-    animation-duration: calc(var(--scroll-speed) * 1.15);
-  }
-
-  .track:nth-child(3) .track-inner {
-    animation-duration: calc(var(--scroll-speed) * 0.9);
-  }
-
-  @keyframes scroll-left {
-    from { transform: translateX(0); }
-    to { transform: translateX(-50%); }
-  }
-
-  @keyframes scroll-right {
-    from { transform: translateX(-50%); }
-    to { transform: translateX(0); }
+    width: 100%;
   }
 
   /* Photo tiles */
   .photo-tile {
-    flex-shrink: 0;
+    position: absolute;
+    top: 0;
     height: 100%;
-    position: relative;
     border-radius: 12px;
     overflow: hidden;
     box-shadow: 0 4px 20px rgba(100,70,65,0.12);
     cursor: default;
-    transition: transform 0.3s ease;
+    transition: box-shadow 0.3s ease;
   }
 
-  .photo-tile:hover { transform: scale(1.02); z-index: 10; }
+  .photo-tile:hover { box-shadow: 0 8px 32px rgba(100,70,65,0.22); z-index: 10; }
 
   .photo-tile img {
     height: 100%;
@@ -213,23 +193,6 @@
     margin-top: 0.15rem;
   }
 
-  /* Placeholder tiles (shown when no photos yet) */
-  .placeholder-tile {
-    flex-shrink: 0;
-    height: 100%;
-    aspect-ratio: 4/3;
-    border-radius: 12px;
-    background: var(--blush);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
-    color: var(--dusty);
-  }
-
-  .placeholder-tile .ph-icon { font-size: 1.5rem; opacity: 0.4; }
-  .placeholder-tile p { font-size: 0.65rem; letter-spacing: 0.1em; opacity: 0.5; }
 
   /* Bottom footer strip */
   .wall-footer {
@@ -287,10 +250,6 @@
     to { transform: scale(1); opacity: 1; }
   }
 
-  /* Pause on hover (entire wall) */
-  .scroll-area:hover .track-inner {
-    animation-play-state: paused;
-  }
 
   /* Photo count display */
   #photoCount {
@@ -511,9 +470,6 @@
   let seenIds = new Set();
   let initialized = false;
 
-  // Placeholder data for empty state
-  const placeholderColors = ['#f2e0da','#e8d5d0','#dce8d9','#f5ece7','#e0daf2','#f2e8d5'];
-
   async function fetchPhotos() {
     try {
       const resp = await fetch(`${GAS_URL}?action=wall`);
@@ -557,61 +513,142 @@
     return tile;
   }
 
-  function buildPlaceholder(color) {
-    const tile = document.createElement('div');
-    tile.className = 'placeholder-tile';
-    tile.style.setProperty('--ph-color', color);
-    tile.style.background = color;
-    tile.innerHTML = `<div class="ph-icon">📷</div><p>photos soon</p>`;
-    return tile;
-  }
+  // ── JS Scroll Engine ──────────────────────────────────────────────────────
+  // Each track has its own state. Tiles are absolutely positioned and moved
+  // via JS each frame. No DOM duplication — each photo tile exists exactly once.
+
+  const TRACK_COUNT = 3;
+  const GAP = 16; // px, matches CSS gap
+  // Slightly different speeds per row for visual variety
+  const SPEEDS = [80, 70, 90]; // px/sec
+
+  // Track state: array of { tiles: [{el, x, w}], totalW, running, speed }
+  const trackStates = [];
+  let rafId = null;
+  let lastTime = null;
 
   function distributeTiles(photos) {
-    // Distribute photos across 3 tracks roughly equally, varying aspect ratios
     const tracks = [[], [], []];
     photos.forEach((p, i) => { tracks[i % 3].push(p); });
     return tracks;
   }
 
   function populateTracks(photos) {
-    const inners = [
+    // Stop any running animation
+    if (rafId) { cancelAnimationFrame(rafId); rafId = null; lastTime = null; }
+
+    const innerEls = [
       document.getElementById('inner0'),
       document.getElementById('inner1'),
       document.getElementById('inner2'),
     ];
 
+    // Clear all tracks
+    innerEls.forEach(el => { el.innerHTML = ''; });
+    trackStates.length = 0;
+
     if (photos.length === 0) {
-      // Show placeholders
-      inners.forEach((inner, ti) => {
-        inner.innerHTML = '';
-        for (let i = 0; i < 8; i++) {
-          const tile = buildPlaceholder(placeholderColors[(ti * 3 + i) % placeholderColors.length]);
-          inner.appendChild(tile);
-        }
-        // Duplicate for seamless scroll
-        Array.from(inner.children).forEach(c => inner.appendChild(c.cloneNode(true)));
-      });
-      document.getElementById('photoCount').textContent = 'Be the first to share!';
+      document.getElementById('photoCount').textContent = '';
       return;
     }
 
     const trackData = distributeTiles(photos);
 
-    inners.forEach((inner, ti) => {
-      inner.innerHTML = '';
-      const trackPhotos = trackData[ti];
-      if (trackPhotos.length === 0) {
-        // fallback: use all photos
-        photos.forEach(p => inner.appendChild(buildTile(p)));
-      } else {
-        trackPhotos.forEach(p => inner.appendChild(buildTile(p)));
-      }
-      // Duplicate for seamless infinite scroll
-      Array.from(inner.children).forEach(c => inner.appendChild(c.cloneNode(true)));
+    // Build tiles and measure widths after they're in the DOM
+    innerEls.forEach((inner, ti) => {
+      const trackPhotos = trackData[ti].length > 0 ? trackData[ti] : photos;
+
+      // Insert tiles off-screen temporarily to measure
+      const tileEls = trackPhotos.map(p => {
+        const tile = buildTile(p);
+        tile.style.position = 'absolute';
+        tile.style.top = '0';
+        tile.style.left = '-9999px'; // off-screen for measuring
+        tile.style.visibility = 'hidden';
+        inner.appendChild(tile);
+        return tile;
+      });
+
+      trackStates.push({ inner, tileEls, trackPhotos, speed: SPEEDS[ti] });
     });
 
-    const count = photos.length;
-    document.getElementById('photoCount').textContent = `${count} moment${count !== 1 ? 's' : ''} shared`;
+    // After layout, measure and initialise positions
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        trackStates.forEach((state, ti) => {
+          const { inner, tileEls, speed } = state;
+          const trackW = inner.parentElement.clientWidth;
+          const trackH = inner.parentElement.clientHeight;
+
+          // Measure each tile's rendered width
+          const tiles = tileEls.map(el => {
+            const w = el.getBoundingClientRect().width || el.offsetWidth || 160;
+            el.style.visibility = '';
+            return { el, w, x: 0 };
+          });
+
+          const totalW = tiles.reduce((s, t) => s + t.w + GAP, 0) - GAP;
+          const canScroll = totalW > trackW;
+
+          if (!canScroll) {
+            // Not enough photos — centre them statically, no scrolling
+            let cx = (trackW - totalW) / 2;
+            tiles.forEach(t => {
+              t.el.style.left = cx + 'px';
+              t.x = cx;
+              cx += t.w + GAP;
+            });
+            state.running = false;
+          } else {
+            // Position tiles starting from the right edge, scrolling left
+            // Initial layout: pack tiles starting just off the right edge
+            let cx = trackW; // start at right edge of screen
+            tiles.forEach(t => {
+              t.el.style.left = cx + 'px';
+              t.x = cx;
+              cx += t.w + GAP;
+            });
+            state.running = true;
+          }
+
+          state.tiles = tiles;
+          state.totalW = totalW;
+          state.trackW = trackW;
+        });
+
+        // Start the animation loop
+        lastTime = null;
+        rafId = requestAnimationFrame(tick);
+
+        const count = photos.length;
+        document.getElementById('photoCount').textContent =
+          `${count} moment${count !== 1 ? 's' : ''} shared`;
+      });
+    });
+  }
+
+  function tick(now) {
+    const dt = lastTime ? Math.min((now - lastTime) / 1000, 0.05) : 0;
+    lastTime = now;
+
+    trackStates.forEach(state => {
+      if (!state.running || !state.tiles) return;
+      const { tiles, speed, trackW } = state;
+
+      tiles.forEach(t => {
+        t.x -= speed * dt;
+        // When a tile fully exits the left edge, wrap it to just beyond the
+        // rightmost tile — this is the recycle step, no duplication
+        if (t.x + t.w < 0) {
+          // Find the current rightmost x
+          const maxX = Math.max(...tiles.map(o => o.x + o.w));
+          t.x = maxX + GAP;
+        }
+        t.el.style.left = t.x + 'px';
+      });
+    });
+
+    rafId = requestAnimationFrame(tick);
   }
 
   async function init() {
