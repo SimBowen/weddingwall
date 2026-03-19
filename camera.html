@@ -604,45 +604,6 @@
     background: #111;
   }
 
-  /* Video preview play button overlay */
-  .video-play-overlay {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 0.6rem;
-    background: rgba(0,0,0,0.35);
-    cursor: pointer;
-    z-index: 6;
-    text-decoration: none;
-  }
-
-  .video-play-circle {
-    width: 64px;
-    height: 64px;
-    border-radius: 50%;
-    background: rgba(255,255,255,0.92);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-  }
-
-  .video-play-circle svg {
-    width: 26px;
-    height: 26px;
-    fill: var(--dusty);
-    margin-left: 3px; /* optical centre */
-  }
-
-  .video-play-label {
-    font-size: 0.7rem;
-    color: white;
-    letter-spacing: 0.12em;
-    font-weight: 500;
-  }
 
   .video-badge {
     position: absolute;
@@ -1068,7 +1029,49 @@
   });
 
   // ── Submit screen ─────────────────────────────────────────
-  function showSinglePreview(objectUrl, isPortrait, isVideo = false) {
+  // Extract a thumbnail from the first frame of a video blob.
+  // Uses a hidden video element seeked to 0.1s, drawn onto a canvas.
+  function extractVideoThumbnail(videoUrl, mimeType, callback) {
+    const vid = document.createElement('video');
+    vid.muted       = true;
+    vid.playsInline = true;
+    vid.preload     = 'metadata';
+    vid.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;';
+    document.body.appendChild(vid);
+
+    const cleanup = () => { try { document.body.removeChild(vid); } catch(e) {} };
+
+    vid.addEventListener('seeked', () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width  = vid.videoWidth  || 640;
+        canvas.height = vid.videoHeight || 480;
+        canvas.getContext('2d').drawImage(vid, 0, 0, canvas.width, canvas.height);
+        cleanup();
+        callback(canvas.toDataURL('image/jpeg', 0.85));
+      } catch(e) {
+        cleanup();
+        callback(''); // fallback: blank
+      }
+    }, { once: true });
+
+    vid.addEventListener('loadedmetadata', () => {
+      vid.currentTime = 0.1; // seek to first frame
+    }, { once: true });
+
+    vid.addEventListener('error', () => {
+      cleanup();
+      callback('');
+    }, { once: true });
+
+    const src = document.createElement('source');
+    src.src  = videoUrl;
+    src.type = mimeType;
+    vid.appendChild(src);
+    vid.load();
+  }
+
+    function showSinglePreview(objectUrl, isPortrait, isVideo = false) {
     document.getElementById('previewWrap').style.display = '';
     document.getElementById('thumbStripWrap').classList.remove('active');
     document.getElementById('previewWrap').className =
@@ -1077,40 +1080,20 @@
     const img   = document.getElementById('previewImg');
     const badge = document.getElementById('videoBadge');
     if (isVideo) {
-      img.style.display = 'none';
       badge.style.display = 'flex';
+      // Show a placeholder first while we extract the thumbnail
+      img.src = '';
+      img.style.display = 'block';
 
-      // Remove any existing video preview elements
-      const oldVid = document.getElementById('previewVideo');
-      if (oldVid) oldVid.remove();
-      const oldOverlay = document.getElementById('videoPlayOverlay');
-      if (oldOverlay) oldOverlay.remove();
-
-      // Show a play button overlay — tapping opens the video in the
-      // device's native player via a direct object URL link.
-      // This sidesteps all browser autoplay/codec restrictions entirely.
-      const overlay = document.createElement('a');
-      overlay.id   = 'videoPlayOverlay';
-      overlay.className = 'video-play-overlay';
-      overlay.href = objectUrl;
-
-      // On mobile, target="_blank" opens in the native video player
-      overlay.target = '_blank';
-      // Fallback: if browser opens inline, try to trigger download/open
-      overlay.setAttribute('type', capturedFiles[0]?.blob?.type || 'video/mp4');
-
-      overlay.innerHTML = `
-        <div class="video-play-circle">
-          <svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-        </div>
-        <span class="video-play-label">Tap to preview</span>`;
-
-      badge.parentNode.insertBefore(overlay, badge);
+      // Extract first frame as a static thumbnail using a hidden video + canvas.
+      // This is reliable on all mobile browsers — no playback required.
+      extractVideoThumbnail(objectUrl, capturedFiles[0]?.blob?.type || 'video/mp4',
+        (thumbUrl) => {
+          img.src = thumbUrl;
+          img.style.display = 'block';
+        }
+      );
     } else {
-      const oldVid = document.getElementById('previewVideo');
-      if (oldVid) oldVid.remove();
-      const oldOverlay = document.getElementById('videoPlayOverlay');
-      if (oldOverlay) oldOverlay.remove();
       badge.style.display = 'none';
       img.src = objectUrl;
       img.style.display = 'block';
@@ -1283,8 +1266,6 @@
     document.getElementById('previewWrap').style.display = '';
     const resetVid = document.getElementById('previewVideo');
     if (resetVid) resetVid.remove();
-    const resetOverlay = document.getElementById('videoPlayOverlay');
-    if (resetOverlay) resetOverlay.remove();
     document.getElementById('previewImg').style.display = 'block';
     document.getElementById('videoBadge').style.display = 'none';
     showScreen('cameraScreen');
