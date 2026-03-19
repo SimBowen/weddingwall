@@ -600,16 +600,16 @@
             });
             state.running = false;
           } else {
-            // Spread tiles so they start distributed across the full screen
-            // width and continue off the right edge. This means photos are
-            // visible immediately rather than streaming in from the right.
-            // Space them evenly then let the scroll engine take over.
-            const spread = Math.max(totalW + GAP, trackW + GAP);
-            const spacing = spread / tiles.length;
+            // Distribute tiles evenly across the screen so they look spread
+            // out from the moment the wall loads. We space them across
+            // exactly trackW (one full screen width), starting from 0, so
+            // the screen is always filled. Each row is offset by a fraction
+            // of the slot width so rows don't vertically align.
+            const slotW = trackW / tiles.length;
             tiles.forEach((t, idx) => {
-              // Offset each row slightly so rows don't line up vertically
-              const rowOffset = ti * (spacing * 0.3);
-              const cx = (idx * spacing) + rowOffset;
+              // Centre the tile within its slot, with a per-row phase shift
+              const rowPhase = ti * (slotW * 0.35);
+              const cx = (idx * slotW) + (slotW - t.w) / 2 + rowPhase;
               t.el.style.left = cx + 'px';
               t.x = cx;
             });
