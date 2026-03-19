@@ -238,6 +238,27 @@
     display: block;
   }
 
+  .download-btn {
+    position: absolute;
+    top: 0.85rem; right: 0.85rem;
+    display: none; /* shown via JS only for camera captures */
+    align-items: center; gap: 0.4rem;
+    padding: 0.45rem 0.9rem;
+    background: rgba(0,0,0,0.4);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 100px;
+    color: rgba(255,255,255,0.9);
+    font-family: 'Jost', sans-serif;
+    font-size: 0.72rem; letter-spacing: 0.08em;
+    cursor: pointer; z-index: 5;
+    transition: background 0.2s;
+    text-decoration: none;
+  }
+  .download-btn:hover { background: rgba(0,0,0,0.6); }
+  .download-btn svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2; }
+
   .retake-btn {
     position: absolute;
     top: 0.85rem; left: 0.85rem;
@@ -700,6 +721,10 @@
         <svg viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>
         Retake
       </button>
+      <a class="download-btn" id="downloadBtn" download>
+        <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Save
+      </a>
     </div>
 
     <!-- Multi-photo thumbnail strip (gallery uploads) -->
@@ -918,54 +943,36 @@
   }
 
   function finishRecording() {
-    const mimeType = mediaRecorder.mimeType || 'video/webm';
+    const mimeType  = mediaRecorder.mimeType || 'video/webm';
     const blob      = new Blob(recordedChunks, { type: mimeType });
-    const ext       = mimeType.includes('mp4') ? 'mp4' : 'webm';
-    const ts        = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-    const objectUrl = URL.createObjectURL(blob);
 
     stopCamera();
-    autoDownload(blob, `bqwedding_${ts}.${ext}`);
 
-    // Detect orientation by loading the blob into a temporary video element
-    // and reading dimensions from loadedmetadata — this respects container
-    // rotation metadata that the live stream dimensions don't reflect.
+    // Create the preview URL once — kept alive for the entire submit flow.
+    // Use a separate URL for the orientation probe so revoking the probe
+    // URL never affects the preview URL.
+    const previewUrl = URL.createObjectURL(blob);
+    const probeUrl   = URL.createObjectURL(blob);
+
     const probe = document.createElement('video');
     probe.muted = true;
     probe.playsInline = true;
     probe.preload = 'metadata';
     probe.onloadedmetadata = () => {
       const isPortrait = probe.videoHeight > probe.videoWidth;
+      // Clean up probe resources
       probe.src = '';
+      URL.revokeObjectURL(probeUrl);
       capturedFiles = [{ blob, isPortrait, isVideo: true }];
-      showSinglePreview(objectUrl, isPortrait, true);
+      showSinglePreview(previewUrl, isPortrait, true, true);
     };
     probe.onerror = () => {
-      // Fallback — assume landscape
+      probe.src = '';
+      URL.revokeObjectURL(probeUrl);
       capturedFiles = [{ blob, isPortrait: false, isVideo: true }];
-      showSinglePreview(objectUrl, false, true);
+      showSinglePreview(previewUrl, false, true, true);
     };
-    probe.src = objectUrl;
-  }
-
-  // Auto-download a blob to the user's device silently.
-  // Only called for camera captures, never for gallery uploads.
-  function autoDownload(blob, filename) {
-    try {
-      const url = URL.createObjectURL(blob);
-      const a   = document.createElement('a');
-      a.href     = url;
-      a.download = filename;
-      a.style.display = 'none';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      // Revoke after a short delay to allow the download to start
-      setTimeout(() => URL.revokeObjectURL(url), 5000);
-    } catch (e) {
-      // Silently ignore — download is a bonus, not critical
-      console.warn('Auto-download failed:', e);
-    }
+    probe.src = probeUrl;
   }
 
   function captureFrame() {
@@ -985,10 +992,7 @@
       const isPortrait = deviceIsLandscape ? false : pixelPortrait;
       capturedFiles = [{ blob, isPortrait, isVideo: false }];
       stopCamera();
-      // Auto-save photo to device
-      const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-      autoDownload(blob, `bqwedding_${ts}.jpg`);
-      showSinglePreview(URL.createObjectURL(blob), isPortrait);
+      showSinglePreview(URL.createObjectURL(blob), isPortrait, false, true);
     }, 'image/jpeg', 0.92);
   }
 
@@ -1050,7 +1054,7 @@
   });
 
   // ── Submit screen ─────────────────────────────────────────
-  function showSinglePreview(objectUrl, isPortrait, isVideo = false) {
+  function showSinglePreview(objectUrl, isPortrait, isVideo = false, isCameraCapture = false) {
     document.getElementById('previewWrap').style.display = '';
     document.getElementById('thumbStripWrap').classList.remove('active');
     document.getElementById('previewWrap').className =
@@ -1059,6 +1063,7 @@
     const img = document.getElementById('previewImg');
     const vid = document.getElementById('previewVideo');
     const badge = document.getElementById('videoBadge');
+    const dlBtn = document.getElementById('downloadBtn');
 
     if (isVideo) {
       img.style.display = 'none';
@@ -1072,6 +1077,18 @@
       img.src = objectUrl;
       img.style.display = 'block';
     }
+
+    // Show download button only for camera captures, not gallery uploads
+    if (isCameraCapture) {
+      const ext = isVideo ? (capturedFiles[0]?.blob?.type?.includes('mp4') ? 'mp4' : 'webm') : 'jpg';
+      const ts  = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      dlBtn.href     = objectUrl;
+      dlBtn.download = `bqwedding_${ts}.${ext}`;
+      dlBtn.style.display = 'flex';
+    } else {
+      dlBtn.style.display = 'none';
+    }
+
     goToSubmitScreen();
   }
 
@@ -1241,6 +1258,7 @@
     document.getElementById('previewVideo').style.display = 'none';
     document.getElementById('previewImg').style.display = 'block';
     document.getElementById('videoBadge').style.display = 'none';
+    document.getElementById('downloadBtn').style.display = 'none';
     showScreen('cameraScreen');
     startCamera();
   });
