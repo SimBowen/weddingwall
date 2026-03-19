@@ -156,12 +156,12 @@
 
   .photo-tile:hover { box-shadow: 0 8px 32px rgba(100,70,65,0.22); z-index: 10; }
 
-  .photo-tile img {
+  .photo-tile img,
+  .photo-tile video {
+    width: 100%;
     height: 100%;
-    width: auto;
     object-fit: cover;
     display: block;
-    min-width: 160px;
   }
 
   /* Caption overlay */
@@ -489,14 +489,17 @@
     const isVideo = photo.mediaType === 'video';
 
     if (isVideo) {
-      // Videos autoplay muted looped — browsers allow this
       const vid = document.createElement('video');
-      vid.src = videoSrc(photo.driveUrl);
       vid.autoplay = true;
       vid.muted = true;
       vid.loop = true;
       vid.playsInline = true;
-      vid.style.cssText = 'height:100%;width:auto;object-fit:cover;display:block;min-width:160px;';
+      // Use <source> with explicit type so browser knows the codec
+      // without needing correct Content-Type headers from Drive
+      const src = document.createElement('source');
+      src.src = videoSrc(photo.driveUrl);
+      src.type = photo.mimeType || 'video/mp4';
+      vid.appendChild(src);
       tile.appendChild(vid);
 
       // Small video indicator badge
@@ -592,6 +595,8 @@
         const tile = buildTile(p);
         tile.style.position = 'absolute';
         tile.style.top = '0';
+        // Set explicit width so portrait/landscape photos don't break spacing
+        tile.style.width = estimatedTileW + 'px';
         inner.appendChild(tile);
         return { el: tile, w: estimatedTileW, x: 0 };
       });
@@ -692,11 +697,14 @@
   // reliably in <video> tags. Convert to lh3.googleusercontent.com/d/FILE_ID.
   function videoSrc(url) {
     if (!url) return '';
-    // Already lh3
-    if (url.includes('lh3.googleusercontent.com')) return url;
-    // Extract file ID from uc?export=view&id=FILE_ID or /file/d/FILE_ID/
-    const m = url.match(/[?&]id=([a-zA-Z0-9_-]+)/) || url.match(/\/d\/([a-zA-Z0-9_-]+)/);
-    if (m) return `https://lh3.googleusercontent.com/d/${m[1]}`;
+    // Extract Drive file ID from any Drive URL format
+    const m = url.match(/[?&]id=([a-zA-Z0-9_-]+)/)
+           || url.match(/\/d\/([a-zA-Z0-9_-]+)/)
+           || url.match(/lh3\.googleusercontent\.com\/d\/([a-zA-Z0-9_-]+)/);
+    if (m) {
+      // export=download works for "anyone with link" files without requiring sign-in
+      return `https://drive.google.com/uc?export=download&id=${m[1]}`;
+    }
     return url;
   }
 </script>
