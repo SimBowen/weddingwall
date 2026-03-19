@@ -238,27 +238,6 @@
     display: block;
   }
 
-  .download-btn {
-    position: absolute;
-    top: 0.85rem; right: 0.85rem;
-    display: none; /* shown via JS only for camera captures */
-    align-items: center; gap: 0.4rem;
-    padding: 0.45rem 0.9rem;
-    background: rgba(0,0,0,0.4);
-    backdrop-filter: blur(6px);
-    -webkit-backdrop-filter: blur(6px);
-    border: 1px solid rgba(255,255,255,0.2);
-    border-radius: 100px;
-    color: rgba(255,255,255,0.9);
-    font-family: 'Jost', sans-serif;
-    font-size: 0.72rem; letter-spacing: 0.08em;
-    cursor: pointer; z-index: 5;
-    transition: background 0.2s;
-    text-decoration: none;
-  }
-  .download-btn:hover { background: rgba(0,0,0,0.6); }
-  .download-btn svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2; }
-
   .retake-btn {
     position: absolute;
     top: 0.85rem; left: 0.85rem;
@@ -721,10 +700,6 @@
         <svg viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>
         Retake
       </button>
-      <a class="download-btn" id="downloadBtn" download>
-        <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        Save
-      </a>
     </div>
 
     <!-- Multi-photo thumbnail strip (gallery uploads) -->
@@ -964,13 +939,13 @@
       probe.src = '';
       URL.revokeObjectURL(probeUrl);
       capturedFiles = [{ blob, isPortrait, isVideo: true }];
-      showSinglePreview(previewUrl, isPortrait, true, true);
+      showSinglePreview(previewUrl, isPortrait, true);
     };
     probe.onerror = () => {
       probe.src = '';
       URL.revokeObjectURL(probeUrl);
       capturedFiles = [{ blob, isPortrait: false, isVideo: true }];
-      showSinglePreview(previewUrl, false, true, true);
+      showSinglePreview(previewUrl, false, true);
     };
     probe.src = probeUrl;
   }
@@ -992,7 +967,7 @@
       const isPortrait = deviceIsLandscape ? false : pixelPortrait;
       capturedFiles = [{ blob, isPortrait, isVideo: false }];
       stopCamera();
-      showSinglePreview(URL.createObjectURL(blob), isPortrait, false, true);
+      showSinglePreview(URL.createObjectURL(blob), isPortrait);
     }, 'image/jpeg', 0.92);
   }
 
@@ -1054,7 +1029,7 @@
   });
 
   // ── Submit screen ─────────────────────────────────────────
-  function showSinglePreview(objectUrl, isPortrait, isVideo = false, isCameraCapture = false) {
+  function showSinglePreview(objectUrl, isPortrait, isVideo = false) {
     document.getElementById('previewWrap').style.display = '';
     document.getElementById('thumbStripWrap').classList.remove('active');
     document.getElementById('previewWrap').className =
@@ -1063,8 +1038,6 @@
     const img = document.getElementById('previewImg');
     const vid = document.getElementById('previewVideo');
     const badge = document.getElementById('videoBadge');
-    const dlBtn = document.getElementById('downloadBtn');
-
     if (isVideo) {
       img.style.display = 'none';
       vid.style.display = 'block';
@@ -1078,17 +1051,6 @@
       badge.style.display = 'none';
       img.src = objectUrl;
       img.style.display = 'block';
-    }
-
-    // Show download button only for camera captures, not gallery uploads
-    if (isCameraCapture) {
-      const ext = isVideo ? (capturedFiles[0]?.blob?.type?.includes('mp4') ? 'mp4' : 'webm') : 'jpg';
-      const ts  = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-      dlBtn.href     = objectUrl;
-      dlBtn.download = `bqwedding_${ts}.${ext}`;
-      dlBtn.style.display = 'flex';
-    } else {
-      dlBtn.style.display = 'none';
     }
 
     goToSubmitScreen();
@@ -1263,7 +1225,6 @@
     resetVid.style.display = 'none';
     document.getElementById('previewImg').style.display = 'block';
     document.getElementById('videoBadge').style.display = 'none';
-    document.getElementById('downloadBtn').style.display = 'none';
     showScreen('cameraScreen');
     startCamera();
   });
