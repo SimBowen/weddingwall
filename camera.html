@@ -856,6 +856,18 @@
   function startRecording() {
     if (!stream) return;
     recordedChunks = [];
+
+    // Grab a still frame NOW — before recording starts, stream is fully live
+    videoThumbUrl = null;
+    try {
+      if (videoEl.videoWidth > 0) {
+        const c = document.createElement('canvas');
+        c.width  = videoEl.videoWidth;
+        c.height = videoEl.videoHeight;
+        c.getContext('2d').drawImage(videoEl, 0, 0);
+        videoThumbUrl = c.toDataURL('image/jpeg', 0.85);
+      }
+    } catch(e) { videoThumbUrl = null; }
     const mimeType = MediaRecorder.isTypeSupported('video/mp4')
       ? 'video/mp4'
       : MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
@@ -900,19 +912,6 @@
     clearInterval(recordingTimer);
     recordingTimeout = null;
     recordingTimer   = null;
-
-    // Grab a thumbnail from the live stream NOW — before stopping.
-    // videoEl still has an active frame at this point.
-    videoThumbUrl = null;
-    try {
-      if (videoEl.readyState >= 2 && videoEl.videoWidth > 0) {
-        const c = document.createElement('canvas');
-        c.width  = videoEl.videoWidth;
-        c.height = videoEl.videoHeight;
-        c.getContext('2d').drawImage(videoEl, 0, 0);
-        videoThumbUrl = c.toDataURL('image/jpeg', 0.85);
-      }
-    } catch(e) { videoThumbUrl = null; }
 
     if (mediaRecorder && mediaRecorder.state === 'recording') {
       mediaRecorder.stop();
