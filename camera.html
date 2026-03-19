@@ -501,12 +501,137 @@
     }
     .flip-btn svg { width: 15px; height: 15px; }
   }
+
+  /* ── Video record button ─────────────────────────────────── */
+  .shutter-wrap-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.6rem;
+    flex-shrink: 0;
+  }
+
+  .record-btn {
+    width: 44px; height: 44px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.15);
+    border: 2px solid rgba(255,100,100,0.7);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    flex-shrink: 0;
+  }
+
+  .record-btn-inner {
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    background: rgba(220,60,60,0.85);
+    transition: all 0.2s;
+    display: block;
+  }
+
+  .record-btn.recording {
+    border-color: rgba(220,60,60,0.9);
+    background: rgba(220,60,60,0.15);
+  }
+
+  .record-btn.recording .record-btn-inner {
+    border-radius: 4px;
+    width: 14px; height: 14px;
+    background: rgba(220,60,60,0.9);
+  }
+
+  /* Countdown ring around record button */
+  .record-btn svg.countdown-ring {
+    position: absolute;
+    top: -3px; left: -3px;
+    width: calc(100% + 6px);
+    height: calc(100% + 6px);
+    transform: rotate(-90deg);
+    pointer-events: none;
+  }
+
+  .countdown-ring circle {
+    fill: none;
+    stroke: rgba(220,60,60,0.85);
+    stroke-width: 3;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 0.5s linear;
+  }
+
+  /* Recording timer */
+  .rec-timer {
+    position: absolute;
+    top: calc(env(safe-area-inset-top, 0px) + 54px);
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    background: rgba(0,0,0,0.45);
+    backdrop-filter: blur(6px);
+    padding: 0.3rem 0.75rem;
+    border-radius: 100px;
+    z-index: 20;
+  }
+  .rec-timer.hidden { display: none; }
+
+  .rec-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: #e03c3c;
+    animation: rec-pulse 1s ease-in-out infinite;
+  }
+
+  @keyframes rec-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  #recTimerText {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: white;
+    letter-spacing: 0.08em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Video preview on submit screen */
+  .preview-video {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  .video-badge {
+    position: absolute;
+    bottom: 0.75rem; right: 0.75rem;
+    background: rgba(0,0,0,0.5);
+    color: white;
+    font-size: 0.62rem;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    padding: 0.2rem 0.6rem;
+    border-radius: 100px;
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+  }
+
+  .video-badge svg { width: 10px; height: 10px; fill: white; }
+
+  /* Landscape adjustments for record btn */
+  @media (orientation: landscape) and (max-height: 600px) {
+    .shutter-wrap-col { flex-direction: column; gap: 0.5rem; }
+    .record-btn { width: 36px; height: 36px; }
+    .record-btn-inner { width: 14px; height: 14px; }
+  }
 </style>
 </head>
 <body>
 
 <div id="flashOverlay"></div>
-<input type="file" id="galleryInput" accept="image/*" multiple>
+<input type="file" id="galleryInput" accept="image/*,video/*" multiple>
 
 <!-- ── BLOCKED ────────────────────────────────────────────── -->
 <div class="screen" id="blockedScreen">
@@ -524,7 +649,7 @@
       <div class="cam-prompt-icon">
         <svg viewBox="0 0 24 24"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
       </div>
-      <p>Tap shutter to open camera</p>
+      <p>Tap shutter for photo &nbsp;·&nbsp; Tap ● for 5s video</p>
     </div>
   </div>
 
@@ -535,11 +660,25 @@
     </button>
   </div>
 
+  <!-- Recording timer -->
+  <div class="rec-timer hidden" id="recTimer">
+    <span class="rec-dot"></span>
+    <span id="recTimerText">0:00</span>
+  </div>
+
   <div class="cam-bottombar">
-    <button class="gallery-btn" id="galleryBtn" title="Upload from gallery">
+    <button class="gallery-btn" id="galleryBtn" title="Upload photo or video">
       <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
     </button>
-    <button class="shutter-btn" id="shutterBtn"></button>
+    <div class="shutter-wrap-col">
+      <button class="shutter-btn" id="shutterBtn"></button>
+      <button class="record-btn" id="recordBtn" title="Tap to record up to 5s video">
+        <span class="record-btn-inner"></span>
+        <svg class="countdown-ring" id="countdownRing" viewBox="0 0 50 50" style="display:none">
+          <circle id="countdownCircle" cx="25" cy="25" r="22"/>
+        </svg>
+      </button>
+    </div>
     <div class="cam-spacer"></div>
   </div>
 </div>
@@ -548,9 +687,14 @@
 <div class="screen" id="submitScreen">
   <div class="submit-inner">
 
-    <!-- Single photo preview (camera capture) -->
+    <!-- Single photo/video preview (camera capture) -->
     <div class="photo-preview-wrap landscape" id="previewWrap">
       <img id="previewImg" src="" alt="Your photo">
+      <video id="previewVideo" class="preview-video" style="display:none" autoplay muted loop playsinline></video>
+      <div class="video-badge" id="videoBadge" style="display:none">
+        <svg viewBox="0 0 24 24"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+        VIDEO
+      </div>
       <button class="retake-btn" id="retakeBtn">
         <svg viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>
         Retake
@@ -612,6 +756,7 @@
   // To change: run in console: crypto.subtle.digest('SHA-256', new TextEncoder().encode('your_token'))
   //   .then(b => console.log([...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')))
   const TOKEN_HASH = 'a4f8ef8ebedbe2aa7a62e4a3f0ff149a78283fdc1dc9c13f5b214d16a26475e7';
+  const MAX_RECORDING_SECS = 5; // hard cap on video length
   // ─────────────────────────────────────────────────────────
 
   // ── Helpers ───────────────────────────────────────────────
@@ -650,8 +795,12 @@
   // ── Camera ────────────────────────────────────────────────
   let stream        = null;
   let facingMode    = 'environment';
-  let capturedFiles = []; // array of {blob, isPortrait}
+  let capturedFiles = []; // array of {blob, isPortrait, isVideo}
   let cameraStarted = false;
+  let mediaRecorder = null;
+  let recordedChunks = [];
+  let recordingTimer = null;
+  let recordingStart = null;
 
   const videoEl    = document.getElementById('videoEl');
   const camPrompt  = document.getElementById('camPrompt');
@@ -679,13 +828,100 @@
 
   document.getElementById('shutterBtn').addEventListener('click', async () => {
     if (!cameraStarted) { await startCamera(); return; }
+    if (mediaRecorder && mediaRecorder.state === 'recording') return; // ignore during recording
     captureFrame();
   });
 
   document.getElementById('flipBtn').addEventListener('click', () => {
+    if (mediaRecorder && mediaRecorder.state === 'recording') return;
     facingMode = facingMode === 'environment' ? 'user' : 'environment';
     if (cameraStarted) startCamera();
   });
+
+  // Record button — tap to start, tap again to stop
+  document.getElementById('recordBtn').addEventListener('click', async () => {
+    if (!cameraStarted) { await startCamera(); return; }
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+      stopRecording();
+    } else {
+      startRecording();
+    }
+  });
+
+  function startRecording() {
+    if (!stream) return;
+    recordedChunks = [];
+    const mimeType = MediaRecorder.isTypeSupported('video/mp4')
+      ? 'video/mp4'
+      : MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
+        ? 'video/webm;codecs=vp9'
+        : 'video/webm';
+
+    mediaRecorder = new MediaRecorder(stream, { mimeType });
+    mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recordedChunks.push(e.data); };
+    mediaRecorder.onstop = finishRecording;
+    mediaRecorder.start(100);
+
+    document.getElementById('recordBtn').classList.add('recording');
+    document.getElementById('recTimer').classList.remove('hidden');
+    recordingStart = Date.now();
+
+    // Countdown ring setup
+    const ring = document.getElementById('countdownRing');
+    const circle = document.getElementById('countdownCircle');
+    const circumference = 2 * Math.PI * 22; // r=22
+    circle.style.strokeDasharray = circumference;
+    circle.style.strokeDashoffset = 0;
+    ring.style.display = 'block';
+
+    // Auto-stop at MAX_RECORDING_SECS
+    recordingTimer = setInterval(() => {
+      const elapsed = (Date.now() - recordingStart) / 1000;
+      const remaining = Math.max(0, MAX_RECORDING_SECS - elapsed);
+
+      // Update timer text
+      const secs = Math.ceil(remaining);
+      document.getElementById('recTimerText').textContent =
+        `${Math.floor(elapsed)}s / ${MAX_RECORDING_SECS}s`;
+
+      // Animate countdown ring — drains as time passes
+      const progress = elapsed / MAX_RECORDING_SECS;
+      circle.style.strokeDashoffset = circumference * progress;
+
+      if (elapsed >= MAX_RECORDING_SECS) {
+        stopRecording();
+      }
+    }, 100);
+  }
+
+  function stopRecording() {
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+      mediaRecorder.stop();
+    }
+    clearInterval(recordingTimer);
+    document.getElementById('recordBtn').classList.remove('recording');
+    document.getElementById('recTimer').classList.add('hidden');
+    document.getElementById('recTimerText').textContent = '0:00';
+    const ring = document.getElementById('countdownRing');
+    ring.style.display = 'none';
+    document.getElementById('countdownCircle').style.strokeDashoffset = 0;
+  }
+
+  function updateRecordingTimer() {
+    const elapsed = Math.floor((Date.now() - recordingStart) / 1000);
+    const m = Math.floor(elapsed / 60);
+    const s = elapsed % 60;
+    document.getElementById('recTimerText').textContent = `${m}:${s.toString().padStart(2, '0')}`;
+  }
+
+  function finishRecording() {
+    const mimeType = mediaRecorder.mimeType || 'video/webm';
+    const blob = new Blob(recordedChunks, { type: mimeType });
+    const isPortrait = (videoEl.videoHeight || 0) > (videoEl.videoWidth || 0);
+    capturedFiles = [{ blob, isPortrait, isVideo: true }];
+    stopCamera();
+    showSinglePreview(URL.createObjectURL(blob), isPortrait, true);
+  }
 
   function captureFrame() {
     // Flash effect
@@ -702,7 +938,7 @@
     canvas.toBlob(blob => {
       const pixelPortrait = vh > vw;
       const isPortrait = deviceIsLandscape ? false : pixelPortrait;
-      capturedFiles = [{ blob, isPortrait }];
+      capturedFiles = [{ blob, isPortrait, isVideo: false }];
       stopCamera();
       showSinglePreview(URL.createObjectURL(blob), isPortrait);
     }, 'image/jpeg', 0.92);
@@ -722,19 +958,41 @@
       // Single file — use the existing single-preview flow
       const file = files[0];
       const url = URL.createObjectURL(file);
-      const img = new Image();
-      img.onload = () => {
-        capturedFiles = [{ blob: file, isPortrait: img.naturalHeight > img.naturalWidth }];
-        showSinglePreview(url, capturedFiles[0].isPortrait);
-      };
-      img.src = url;
+      const isVideo = file.type.startsWith('video/');
+      if (isVideo) {
+        capturedFiles = [{ blob: file, isPortrait: false, isVideo: true }];
+        // Detect portrait from video dimensions
+        const vid = document.createElement('video');
+        vid.src = url;
+        vid.onloadedmetadata = () => {
+          const isPortrait = vid.videoHeight > vid.videoWidth;
+          capturedFiles[0].isPortrait = isPortrait;
+          showSinglePreview(url, isPortrait, true);
+        };
+        vid.onerror = () => showSinglePreview(url, false, true);
+      } else {
+        const img = new Image();
+        img.onload = () => {
+          capturedFiles = [{ blob: file, isPortrait: img.naturalHeight > img.naturalWidth, isVideo: false }];
+          showSinglePreview(url, capturedFiles[0].isPortrait, false);
+        };
+        img.src = url;
+      }
     } else {
       // Multiple files — load all, detect orientations, show strip
       Promise.all(files.map(file => new Promise(resolve => {
         const url = URL.createObjectURL(file);
-        const img = new Image();
-        img.onload = () => resolve({ blob: file, isPortrait: img.naturalHeight > img.naturalWidth, url });
-        img.src = url;
+        const isVideo = file.type.startsWith('video/');
+        if (isVideo) {
+          const vid = document.createElement('video');
+          vid.src = url;
+          vid.onloadedmetadata = () => resolve({ blob: file, isPortrait: vid.videoHeight > vid.videoWidth, url, isVideo: true });
+          vid.onerror = () => resolve({ blob: file, isPortrait: false, url, isVideo: true });
+        } else {
+          const img = new Image();
+          img.onload = () => resolve({ blob: file, isPortrait: img.naturalHeight > img.naturalWidth, url, isVideo: false });
+          img.src = url;
+        }
       }))).then(results => {
         capturedFiles = results;
         showMultiPreview(results);
@@ -744,12 +1002,28 @@
   });
 
   // ── Submit screen ─────────────────────────────────────────
-  function showSinglePreview(objectUrl, isPortrait) {
+  function showSinglePreview(objectUrl, isPortrait, isVideo = false) {
     document.getElementById('previewWrap').style.display = '';
     document.getElementById('thumbStripWrap').classList.remove('active');
-    document.getElementById('previewImg').src = objectUrl;
     document.getElementById('previewWrap').className =
       'photo-preview-wrap ' + (isPortrait ? 'portrait' : 'landscape');
+
+    const img = document.getElementById('previewImg');
+    const vid = document.getElementById('previewVideo');
+    const badge = document.getElementById('videoBadge');
+
+    if (isVideo) {
+      img.style.display = 'none';
+      vid.src = objectUrl;
+      vid.style.display = 'block';
+      badge.style.display = 'flex';
+    } else {
+      vid.style.display = 'none';
+      vid.src = '';
+      badge.style.display = 'none';
+      img.src = objectUrl;
+      img.style.display = 'block';
+    }
     goToSubmitScreen();
   }
 
@@ -824,22 +1098,58 @@
       });
     }
 
+    // Upload a video directly to Drive via resumable upload, then log metadata to GAS.
+    // This avoids base64 encoding large files through GAS.
+    async function uploadVideoToDrive(blob, mimeType, fileName) {
+      // Step 1: ask GAS for a resumable upload session URL
+      const initResp = await fetch(GAS_URL, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'initVideoUpload', fileName, mimeType })
+      });
+      const initJson = await initResp.json();
+      if (!initJson.success) throw new Error('Could not init video upload');
+      const { uploadUrl } = initJson;
+
+      // Step 2: PUT the raw video bytes to the resumable session URL
+      const uploadResp = await fetch(uploadUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': mimeType },
+        body: blob
+      });
+      if (!uploadResp.ok) throw new Error('Video upload failed');
+      const driveFile = await uploadResp.json();
+      return driveFile.id;
+    }
+
     let failed = 0;
     for (let i = 0; i < total; i++) {
-      const { blob } = capturedFiles[i];
+      const { blob, isVideo } = capturedFiles[i];
       btn.innerHTML = `<span class="spinner"></span>Uploading ${i + 1} of ${total}…`;
       statusEl.textContent = `${i + 1} / ${total}`;
       progressFill.style.width = ((i / total) * 100) + '%';
 
       try {
-        const base64    = await blobToBase64(blob);
-        const mimeType  = blob.type || 'image/jpeg';
+        const mimeType  = blob.type || (isVideo ? 'video/mp4' : 'image/jpeg');
         const timestamp = new Date().toISOString();
-        const resp = await fetch(GAS_URL, {
-          method: 'POST',
-          body: JSON.stringify({ action: 'upload', name, caption, timestamp, imageData: base64, mimeType })
-        });
-        const json = await resp.json();
+        let resp, json;
+
+        if (isVideo) {
+          const ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
+          const fileName = `video_${timestamp.replace(/[:.]/g,'-')}_${name}.${ext}`;
+          const base64 = await blobToBase64(blob);
+          resp = await fetch(GAS_URL, {
+            method: 'POST',
+            body: JSON.stringify({ action: 'upload', name, caption, timestamp, imageData: base64, mimeType })
+          });
+          json = await resp.json();
+        } else {
+          const base64 = await blobToBase64(blob);
+          resp = await fetch(GAS_URL, {
+            method: 'POST',
+            body: JSON.stringify({ action: 'upload', name, caption, timestamp, imageData: base64, mimeType })
+          });
+          json = await resp.json();
+        }
         if (!json.success) failed++;
       } catch (err) {
         failed++;
@@ -859,8 +1169,8 @@
         // Update success message for multiple
         document.querySelector('.success-sub').innerHTML =
           total > 1
-            ? `Your ${total} photos have been shared.<br>Look out for them on the photo wall!`
-            : 'Your photo has been shared.<br>Look out for it on the photo wall!';
+            ? `Your ${total} moments have been shared.<br>Look out for them on the photo wall!`
+            : (capturedFiles[0]?.isVideo ? 'Your video has been shared.<br>Look out for it on the photo wall!' : 'Your photo has been shared.<br>Look out for it on the photo wall!');
       } else if (failed < total) {
         showToast(`${total - failed} of ${total} uploaded — ${failed} failed`, 'error');
         btn.innerHTML = capturedFiles.length > 1 ? `Share ${total} photos` : 'Share this moment';
@@ -879,6 +1189,10 @@
     document.getElementById('thumbStrip').innerHTML = '';
     document.getElementById('thumbStripWrap').classList.remove('active');
     document.getElementById('previewWrap').style.display = '';
+    document.getElementById('previewVideo').src = '';
+    document.getElementById('previewVideo').style.display = 'none';
+    document.getElementById('previewImg').style.display = 'block';
+    document.getElementById('videoBadge').style.display = 'none';
     showScreen('cameraScreen');
     startCamera();
   });
