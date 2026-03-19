@@ -573,19 +573,35 @@
       return;
     }
 
-    // Pre-detect portrait/landscape for each photo by loading its thumbnail.
-    // Runs in parallel with a 3s timeout so a slow image never stalls the wall.
+    // Pre-detect portrait/landscape for each photo/video.
+    // Images: load thumbnail and check naturalHeight > naturalWidth.
+    // Videos: load metadata from the video element and check videoHeight > videoWidth.
+    // All run in parallel with a 4s timeout so a slow asset never stalls the wall.
     await Promise.all(photos.map(p => new Promise(resolve => {
-      if (p.mediaType === 'video') { p.isPortrait = false; resolve(); return; }
-      const timeout = setTimeout(() => { p.isPortrait = false; resolve(); }, 3000);
-      const img = new Image();
-      img.onload = () => {
-        clearTimeout(timeout);
-        p.isPortrait = img.naturalHeight > img.naturalWidth;
-        resolve();
-      };
-      img.onerror = () => { clearTimeout(timeout); p.isPortrait = false; resolve(); };
-      img.src = p.thumbnailUrl || p.driveUrl;
+      const timeout = setTimeout(() => { p.isPortrait = false; resolve(); }, 4000);
+
+      if (p.mediaType === 'video') {
+        const vid = document.createElement('video');
+        vid.muted = true;
+        vid.preload = 'metadata';
+        vid.onloadedmetadata = () => {
+          clearTimeout(timeout);
+          p.isPortrait = vid.videoHeight > vid.videoWidth;
+          vid.src = '';
+          resolve();
+        };
+        vid.onerror = () => { clearTimeout(timeout); p.isPortrait = false; resolve(); };
+        vid.src = videoSrc(p.driveUrl);
+      } else {
+        const img = new Image();
+        img.onload = () => {
+          clearTimeout(timeout);
+          p.isPortrait = img.naturalHeight > img.naturalWidth;
+          resolve();
+        };
+        img.onerror = () => { clearTimeout(timeout); p.isPortrait = false; resolve(); };
+        img.src = p.thumbnailUrl || p.driveUrl;
+      }
     })));
 
     const trackData = distributeTiles(photos);
