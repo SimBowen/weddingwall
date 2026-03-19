@@ -198,6 +198,11 @@
     cursor: pointer;
   }
 
+  /* Portrait videos get a taller card */
+  .card-img.portrait-video {
+    aspect-ratio: 9/16;
+  }
+
   .card-body { padding: 0.9rem; }
 
   .card-meta {
@@ -815,11 +820,17 @@
       if (photo.mediaType === 'video') openLightboxVideo(photo.driveUrl, photo.mimeType);
       else openLightbox(photo.driveUrl || photo.thumbnailUrl);
     });
-    // Play video on hover
+    // Play video on hover + detect portrait orientation
     if (isVideo) {
       const vid = card.querySelector('video.card-img');
       card.querySelector('.card-img-wrap').addEventListener('mouseenter', () => vid.play());
       card.querySelector('.card-img-wrap').addEventListener('mouseleave', () => { vid.pause(); vid.currentTime = 0; });
+      // Detect portrait from metadata and apply taller aspect ratio
+      vid.addEventListener('loadedmetadata', () => {
+        if (vid.videoHeight > vid.videoWidth) {
+          vid.classList.add('portrait-video');
+        }
+      }, { once: true });
     }
 
     // Action buttons (includes delete, delete-confirm, delete-cancel)
