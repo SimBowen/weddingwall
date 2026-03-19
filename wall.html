@@ -607,9 +607,8 @@
         return { el: tile, w: tileW, x: 0 };
       });
 
-      // Always scroll — if tiles don't fill the screen, duplicate the photo
-      // objects (not DOM elements) until we have enough content to cover
-      // at least 2× trackW. This ensures every row scrolls continuously.
+      // Duplicate tiles until content fills at least 2× trackW
+      // so the scroll loop always has enough to wrap seamlessly.
       let allTiles = tiles.slice();
       const basePhotos = trackPhotos.slice();
       let safetyLimit = 0;
@@ -629,16 +628,17 @@
         });
       }
 
-      const totalW   = allTiles.reduce((s, t) => s + t.w + GAP, 0) - GAP;
-      const cycleW   = Math.max(totalW + GAP, trackW);
-      const n        = allTiles.length;
-      const step     = cycleW / n;
-      const rowPhase = ti * (trackW / 3.3);
+      // Place tiles in a simple left-to-right sequence starting at 0.
+      // Apply a per-row offset so rows don't align vertically — but clamp
+      // the offset so it never causes tiles to overlap (must be < one tile width).
+      const avgTileW = allTiles.reduce((s, t) => s + t.w, 0) / allTiles.length;
+      const rowOffset = ti * (avgTileW * 0.6); // safe: less than one tile width
 
-      allTiles.forEach((t, idx) => {
-        const cx = ((idx * step) + rowPhase) % cycleW;
+      let cx = rowOffset;
+      allTiles.forEach(t => {
         t.el.style.left = cx + 'px';
         t.x = cx;
+        cx += t.w + GAP;
       });
 
       trackStates.push({ inner, tiles: allTiles, speed: SPEEDS[ti], ti, trackW, running: true });
