@@ -522,7 +522,7 @@
   <!-- Fields -->
   <div class="field-group">
     <div>
-      <div class="field-label">Your name</div>
+      <div class="field-label">Your name <span style="color:#c4b0ae;font-size:0.6rem;">(optional)</span></div>
       <input class="field-input" id="nameInput" type="text" placeholder="e.g. Auntie Susan" maxlength="50">
     </div>
     <div>
@@ -681,8 +681,7 @@
 
   submitBtn.addEventListener('click', async () => {
     if (!capturedBlob) { showToast('Please take or choose a photo first ✦', 'error'); return; }
-    const name = document.getElementById('nameInput').value.trim();
-    if (!name) { showToast('Please enter your name', 'error'); return; }
+    const name = document.getElementById('nameInput').value.trim() || 'Guest';
 
     submitBtn.disabled = true;
     submitBtn.innerHTML = '<span class="spinner"></span>Uploading…';
