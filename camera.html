@@ -1049,11 +1049,9 @@
       const newVid = document.createElement('video');
       newVid.id          = 'previewVideo';
       newVid.className   = 'preview-video';
-      newVid.autoplay    = true;
       newVid.muted       = true;
-      newVid.loop        = true;
       newVid.playsInline = true;
-      newVid.controls    = true; // allow manual play if autoplay blocked
+      newVid.controls    = true;
       newVid.setAttribute('playsinline', '');
       newVid.setAttribute('webkit-playsinline', '');
 
@@ -1065,7 +1063,10 @@
       // Insert before the badge
       badge.parentNode.insertBefore(newVid, badge);
       newVid.load();
-      newVid.play().catch(() => {});
+      // Play once after metadata is ready — avoids the autoplay/controls flicker
+      newVid.addEventListener('canplay', () => {
+        newVid.play().catch(() => {});
+      }, { once: true });
     } else {
       const oldVid = document.getElementById('previewVideo');
       if (oldVid) oldVid.remove();
