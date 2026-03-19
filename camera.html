@@ -805,7 +805,8 @@
   let recordingTimer   = null;
   let recordingTimeout = null;
   let recordingStart   = null;
-  let videoThumbUrl    = null; // captured from live stream at stop time
+  let videoThumbUrl      = null; // still frame grabbed at recording start
+  let videoThumbIsPortrait = false;
 
   const videoEl    = document.getElementById('videoEl');
   const camPrompt  = document.getElementById('camPrompt');
@@ -859,6 +860,7 @@
 
     // Grab a still frame NOW — before recording starts, stream is fully live
     videoThumbUrl = null;
+    videoThumbIsPortrait = false;
     try {
       if (videoEl.videoWidth > 0) {
         const c = document.createElement('canvas');
@@ -866,8 +868,9 @@
         c.height = videoEl.videoHeight;
         c.getContext('2d').drawImage(videoEl, 0, 0);
         videoThumbUrl = c.toDataURL('image/jpeg', 0.85);
+        videoThumbIsPortrait = videoEl.videoHeight > videoEl.videoWidth;
       }
-    } catch(e) { videoThumbUrl = null; }
+    } catch(e) { videoThumbUrl = null; videoThumbIsPortrait = false; }
     const mimeType = MediaRecorder.isTypeSupported('video/mp4')
       ? 'video/mp4'
       : MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
@@ -932,36 +935,14 @@
   }
 
   function finishRecording() {
-    const mimeType  = mediaRecorder.mimeType || 'video/webm';
-    const blob      = new Blob(recordedChunks, { type: mimeType });
-
+    const mimeType = mediaRecorder.mimeType || 'video/webm';
+    const blob     = new Blob(recordedChunks, { type: mimeType });
+    // Orientation already known from the still grabbed at startRecording time.
+    // Use the still thumb dimensions to determine portrait/landscape.
+    const isPortrait = videoThumbIsPortrait;
+    capturedFiles = [{ blob, isPortrait, isVideo: true }];
     stopCamera();
-
-    // Create the preview URL once — kept alive for the entire submit flow.
-    // Use a separate URL for the orientation probe so revoking the probe
-    // URL never affects the preview URL.
-    const previewUrl = URL.createObjectURL(blob);
-    const probeUrl   = URL.createObjectURL(blob);
-
-    const probe = document.createElement('video');
-    probe.muted = true;
-    probe.playsInline = true;
-    probe.preload = 'metadata';
-    probe.onloadedmetadata = () => {
-      const isPortrait = probe.videoHeight > probe.videoWidth;
-      // Clean up probe resources
-      probe.src = '';
-      URL.revokeObjectURL(probeUrl);
-      capturedFiles = [{ blob, isPortrait, isVideo: true }];
-      showSinglePreview(previewUrl, isPortrait, true);
-    };
-    probe.onerror = () => {
-      probe.src = '';
-      URL.revokeObjectURL(probeUrl);
-      capturedFiles = [{ blob, isPortrait: false, isVideo: true }];
-      showSinglePreview(previewUrl, false, true);
-    };
-    probe.src = probeUrl;
+    showSinglePreview(null, isPortrait, true);
   }
 
   function captureFrame() {
@@ -1055,11 +1036,9 @@
       badge.style.display = 'flex';
       document.getElementById('previewWrap').style.background = '#1a1414';
       if (videoThumbUrl) {
-        // Show the frame grabbed from the live stream at stop time
         img.src = videoThumbUrl;
         img.style.display = 'block';
       } else {
-        // No thumbnail — show dark placeholder
         img.style.display = 'none';
       }
     } else {
