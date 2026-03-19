@@ -491,7 +491,7 @@
     if (isVideo) {
       // Videos autoplay muted looped — browsers allow this
       const vid = document.createElement('video');
-      vid.src = photo.driveUrl;
+      vid.src = videoSrc(photo.driveUrl);
       vid.autoplay = true;
       vid.muted = true;
       vid.loop = true;
@@ -554,7 +554,6 @@
   }
 
   function populateTracks(photos) {
-    // Stop any running animation
     if (rafId) { cancelAnimationFrame(rafId); rafId = null; lastTime = null; }
 
     const innerEls = [
@@ -563,7 +562,6 @@
       document.getElementById('inner2'),
     ];
 
-    // Clear all tracks
     innerEls.forEach(el => { el.innerHTML = ''; });
     trackStates.length = 0;
 
@@ -574,96 +572,68 @@
 
     const trackData = distributeTiles(photos);
 
-    // Build tiles and measure widths after they're in the DOM
+    // We can't rely on image load to measure widths — images may not be
+    // loaded when we position tiles. Instead we estimate tile width from
+    // the track height and a typical 4:3 aspect ratio. This gives consistent
+    // initial spread regardless of image load state.
+    // Once images load, their actual width may differ slightly, but the
+    // scroll engine corrects positions continuously via the recycle logic.
+
     innerEls.forEach((inner, ti) => {
       const trackPhotos = trackData[ti].length > 0 ? trackData[ti] : photos;
+      const trackW = inner.parentElement.clientWidth;
+      const trackH = inner.parentElement.clientHeight || 200;
 
-      // Insert tiles off-screen temporarily to measure
-      const tileEls = trackPhotos.map(p => {
+      // Estimate tile width: assume 4:3 landscape aspect ratio
+      const estimatedTileW = Math.round(trackH * (4 / 3));
+
+      // Build and insert tiles — visible immediately, positioned correctly
+      const tiles = trackPhotos.map(p => {
         const tile = buildTile(p);
         tile.style.position = 'absolute';
         tile.style.top = '0';
-        tile.style.left = '-9999px'; // off-screen for measuring
-        tile.style.visibility = 'hidden';
         inner.appendChild(tile);
-        return tile;
+        return { el: tile, w: estimatedTileW, x: 0 };
       });
 
-      trackStates.push({ inner, tileEls, trackPhotos, speed: SPEEDS[ti], ti });
-    });
+      const n = tiles.length;
+      const totalEstW = n * (estimatedTileW + GAP) - GAP;
+      const canScroll = totalEstW > trackW;
 
-    // After layout, measure and initialise positions
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        trackStates.forEach((state) => {
-          const { inner, tileEls, speed, ti } = state;
-          const trackW = inner.parentElement.clientWidth;
-          const trackH = inner.parentElement.clientHeight;
+      if (!canScroll) {
+        // Centre statically
+        let cx = (trackW - totalEstW) / 2;
+        tiles.forEach(t => {
+          t.el.style.left = cx + 'px';
+          t.x = cx;
+          cx += t.w + GAP;
+        });
+        trackStates.push({ inner, tiles, speed: SPEEDS[ti], ti, trackW, running: false });
+      } else {
+        // Spread tiles evenly across the screen from the start.
+        // Use trackW as the cycle so tiles always cover the full viewport.
+        // Each row is phase-shifted by trackW/3 so rows stagger nicely.
+        const cycleW = Math.max(totalEstW + GAP, trackW);
+        const step = cycleW / n;
+        const rowPhase = ti * (trackW / 3.3);
 
-          // Measure each tile's rendered width
-          const tiles = tileEls.map(el => {
-            const w = el.getBoundingClientRect().width || el.offsetWidth || 160;
-            el.style.visibility = '';
-            return { el, w, x: 0 };
-          });
-
-          const totalW = tiles.reduce((s, t) => s + t.w + GAP, 0) - GAP;
-          const canScroll = totalW > trackW;
-
-          if (!canScroll) {
-            // Not enough photos — centre them statically, no scrolling
-            let cx = (trackW - totalW) / 2;
-            tiles.forEach(t => {
-              t.el.style.left = cx + 'px';
-              t.x = cx;
-              cx += t.w + GAP;
-            });
-            state.running = false;
-          } else {
-            // Space tiles so the gap between them is consistent and they fill
-            // the screen evenly. The scroll cycle length is the total content
-            // width (tiles + gaps). We want the tiles to appear evenly spread
-            // across the viewport at load time, then scroll left continuously.
-            //
-            // Strategy: place tiles so they are spaced `cycleW / n` apart,
-            // where cycleW is chosen to be at least trackW so the screen is
-            // always full. Each row gets a phase offset so rows are staggered.
-
-            const n = tiles.length;
-            // Cycle width: how far the belt must travel before it repeats.
-            // Must be >= trackW so the screen is always covered.
-            const cycleW = Math.max(totalW + GAP, trackW);
-            const step = cycleW / n; // distance between tile starts
-
-            // Row phase: offset each row by a different fraction of cycleW
-            // so tiles in different rows don't line up vertically.
-            const rowPhase = ti * (cycleW / 3.7);
-
-            tiles.forEach((t, idx) => {
-              let cx = (idx * step) + rowPhase;
-              // Wrap phase into [0, cycleW) so tiles stay on-screen at start
-              cx = cx % cycleW;
-              t.el.style.left = cx + 'px';
-              t.x = cx;
-            });
-            state.cycleW = cycleW;
-            state.running = true;
-          }
-
-          state.tiles = tiles;
-          state.totalW = totalW;
-          state.trackW = trackW;
+        tiles.forEach((t, idx) => {
+          const cx = ((idx * step) + rowPhase) % cycleW;
+          t.el.style.left = cx + 'px';
+          t.x = cx;
         });
 
-        // Start the animation loop
-        lastTime = null;
-        rafId = requestAnimationFrame(tick);
-
-        const count = photos.length;
-        document.getElementById('photoCount').textContent =
-          `${count} moment${count !== 1 ? 's' : ''} shared`;
-      });
+        trackStates.push({ inner, tiles, speed: SPEEDS[ti], ti, trackW, running: true });
+      }
     });
+
+    // Start scroll loop immediately — no waiting for images
+    lastTime = null;
+    rafId = requestAnimationFrame(tick);
+
+    const count = photos.length;
+    document.getElementById('photoCount').textContent =
+      `${count} moment${count !== 1 ? 's' : ''} shared`;
   }
 
   function tick(now) {
@@ -717,6 +687,18 @@
 
   if (checkLogin()) init();
   setInterval(() => { if (checkLogin()) pollForUpdates(); }, POLL_INTERVAL);
+
+  // Normalise Drive URLs for video — the uc?export=view format doesn't stream
+  // reliably in <video> tags. Convert to lh3.googleusercontent.com/d/FILE_ID.
+  function videoSrc(url) {
+    if (!url) return '';
+    // Already lh3
+    if (url.includes('lh3.googleusercontent.com')) return url;
+    // Extract file ID from uc?export=view&id=FILE_ID or /file/d/FILE_ID/
+    const m = url.match(/[?&]id=([a-zA-Z0-9_-]+)/) || url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+    if (m) return `https://lh3.googleusercontent.com/d/${m[1]}`;
+    return url;
+  }
 </script>
 </body>
 </html>
