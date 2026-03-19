@@ -728,7 +728,7 @@
     card.innerHTML = `
       <div class="card-img-wrap">
         ${isVideo
-          ? `<video class="card-img" src="${photo.driveUrl}" muted loop playsinline style="object-fit:cover;background:#111;"></video>
+          ? `<video class="card-img" src="${videoSrc(photo.driveUrl)}" muted loop playsinline style="object-fit:cover;background:#111;"></video>
              <div style="position:absolute;top:0.5rem;right:0.5rem;background:rgba(0,0,0,0.5);color:white;font-size:0.62rem;padding:0.2rem 0.55rem;border-radius:100px;letter-spacing:0.08em;z-index:4;">▶ VIDEO</div>`
           : `<img class="card-img" src="${photo.thumbnailUrl || photo.driveUrl}" alt="" loading="lazy">`
         }
@@ -964,7 +964,7 @@
   function openLightboxVideo(url) {
     document.getElementById('lightboxImg').style.display = 'none';
     const vid = document.getElementById('lightboxVideo');
-    vid.src = url;
+    vid.src = videoSrc(url);
     vid.style.display = 'block';
     document.getElementById('lightbox').classList.add('active');
   }
@@ -979,6 +979,18 @@
     t.textContent = msg;
     t.className = 'toast show ' + type;
     setTimeout(() => t.className = 'toast', 3000);
+  }
+
+  // Normalise Drive URLs for video — the uc?export=view format doesn't stream
+  // reliably in <video> tags. Convert to lh3.googleusercontent.com/d/FILE_ID.
+  function videoSrc(url) {
+    if (!url) return '';
+    // Already lh3
+    if (url.includes('lh3.googleusercontent.com')) return url;
+    // Extract file ID from uc?export=view&id=FILE_ID or /file/d/FILE_ID/
+    const m = url.match(/[?&]id=([a-zA-Z0-9_-]+)/) || url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+    if (m) return `https://lh3.googleusercontent.com/d/${m[1]}`;
+    return url;
   }
 </script>
 </body>
