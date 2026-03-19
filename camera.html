@@ -800,11 +800,12 @@
   let facingMode    = 'environment';
   let capturedFiles = []; // array of {blob, isPortrait, isVideo}
   let cameraStarted = false;
-  let mediaRecorder = null;
-  let recordedChunks = [];
-  let recordingTimer  = null;
+  let mediaRecorder    = null;
+  let recordedChunks   = [];
+  let recordingTimer   = null;
   let recordingTimeout = null;
-  let recordingStart  = null;
+  let recordingStart   = null;
+  let videoThumbUrl    = null; // captured from live stream at stop time
 
   const videoEl    = document.getElementById('videoEl');
   const camPrompt  = document.getElementById('camPrompt');
@@ -899,6 +900,20 @@
     clearInterval(recordingTimer);
     recordingTimeout = null;
     recordingTimer   = null;
+
+    // Grab a thumbnail from the live stream NOW — before stopping.
+    // videoEl still has an active frame at this point.
+    videoThumbUrl = null;
+    try {
+      if (videoEl.readyState >= 2 && videoEl.videoWidth > 0) {
+        const c = document.createElement('canvas');
+        c.width  = videoEl.videoWidth;
+        c.height = videoEl.videoHeight;
+        c.getContext('2d').drawImage(videoEl, 0, 0);
+        videoThumbUrl = c.toDataURL('image/jpeg', 0.85);
+      }
+    } catch(e) { videoThumbUrl = null; }
+
     if (mediaRecorder && mediaRecorder.state === 'recording') {
       mediaRecorder.stop();
     }
@@ -1029,49 +1044,7 @@
   });
 
   // ── Submit screen ─────────────────────────────────────────
-  // Extract a thumbnail from the first frame of a video blob.
-  // Uses a hidden video element seeked to 0.1s, drawn onto a canvas.
-  function extractVideoThumbnail(videoUrl, mimeType, callback) {
-    const vid = document.createElement('video');
-    vid.muted       = true;
-    vid.playsInline = true;
-    vid.preload     = 'metadata';
-    vid.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;';
-    document.body.appendChild(vid);
-
-    const cleanup = () => { try { document.body.removeChild(vid); } catch(e) {} };
-
-    vid.addEventListener('seeked', () => {
-      try {
-        const canvas = document.createElement('canvas');
-        canvas.width  = vid.videoWidth  || 640;
-        canvas.height = vid.videoHeight || 480;
-        canvas.getContext('2d').drawImage(vid, 0, 0, canvas.width, canvas.height);
-        cleanup();
-        callback(canvas.toDataURL('image/jpeg', 0.85));
-      } catch(e) {
-        cleanup();
-        callback(''); // fallback: blank
-      }
-    }, { once: true });
-
-    vid.addEventListener('loadedmetadata', () => {
-      vid.currentTime = 0.1; // seek to first frame
-    }, { once: true });
-
-    vid.addEventListener('error', () => {
-      cleanup();
-      callback('');
-    }, { once: true });
-
-    const src = document.createElement('source');
-    src.src  = videoUrl;
-    src.type = mimeType;
-    vid.appendChild(src);
-    vid.load();
-  }
-
-    function showSinglePreview(objectUrl, isPortrait, isVideo = false) {
+  function showSinglePreview(objectUrl, isPortrait, isVideo = false) {
     document.getElementById('previewWrap').style.display = '';
     document.getElementById('thumbStripWrap').classList.remove('active');
     document.getElementById('previewWrap').className =
@@ -1081,19 +1054,17 @@
     const badge = document.getElementById('videoBadge');
     if (isVideo) {
       badge.style.display = 'flex';
-      // Show a placeholder first while we extract the thumbnail
-      img.src = '';
-      img.style.display = 'block';
-
-      // Extract first frame as a static thumbnail using a hidden video + canvas.
-      // This is reliable on all mobile browsers — no playback required.
-      extractVideoThumbnail(objectUrl, capturedFiles[0]?.blob?.type || 'video/mp4',
-        (thumbUrl) => {
-          img.src = thumbUrl;
-          img.style.display = 'block';
-        }
-      );
+      document.getElementById('previewWrap').style.background = '#1a1414';
+      if (videoThumbUrl) {
+        // Show the frame grabbed from the live stream at stop time
+        img.src = videoThumbUrl;
+        img.style.display = 'block';
+      } else {
+        // No thumbnail — show dark placeholder
+        img.style.display = 'none';
+      }
     } else {
+      document.getElementById('previewWrap').style.background = '';
       badge.style.display = 'none';
       img.src = objectUrl;
       img.style.display = 'block';
