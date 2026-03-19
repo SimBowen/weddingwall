@@ -1067,9 +1067,11 @@
 
     if (isVideo) {
       img.style.display = 'none';
-      vid.src = objectUrl;
       vid.style.display = 'block';
       badge.style.display = 'flex';
+      vid.src = objectUrl;
+      vid.load();
+      vid.play().catch(() => {}); // autoplay may be blocked; ignore
     } else {
       vid.style.display = 'none';
       vid.src = '';
@@ -1254,8 +1256,11 @@
     document.getElementById('thumbStrip').innerHTML = '';
     document.getElementById('thumbStripWrap').classList.remove('active');
     document.getElementById('previewWrap').style.display = '';
-    document.getElementById('previewVideo').src = '';
-    document.getElementById('previewVideo').style.display = 'none';
+    const resetVid = document.getElementById('previewVideo');
+    resetVid.pause();
+    resetVid.removeAttribute('src');
+    resetVid.load();
+    resetVid.style.display = 'none';
     document.getElementById('previewImg').style.display = 'block';
     document.getElementById('videoBadge').style.display = 'none';
     document.getElementById('downloadBtn').style.display = 'none';
