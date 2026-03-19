@@ -691,7 +691,6 @@
     <!-- Single photo/video preview (camera capture) -->
     <div class="photo-preview-wrap landscape" id="previewWrap">
       <img id="previewImg" src="" alt="Your photo">
-      <video id="previewVideo" class="preview-video" style="display:none" autoplay muted loop playsinline></video>
       <div class="video-badge" id="videoBadge" style="display:none">
         <svg viewBox="0 0 24 24"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
         VIDEO
@@ -1035,19 +1034,41 @@
     document.getElementById('previewWrap').className =
       'photo-preview-wrap ' + (isPortrait ? 'portrait' : 'landscape');
 
-    const img = document.getElementById('previewImg');
-    const vid = document.getElementById('previewVideo');
+    const img   = document.getElementById('previewImg');
     const badge = document.getElementById('videoBadge');
     if (isVideo) {
       img.style.display = 'none';
-      vid.style.display = 'block';
       badge.style.display = 'flex';
-      vid.src = objectUrl;
-      vid.load();
-      vid.play().catch(() => {}); // autoplay may be blocked; ignore
+
+      // Remove any existing preview video and create a fresh one.
+      // Reusing a video element with a new src causes stale-state issues
+      // on mobile browsers — a new element always starts clean.
+      const oldVid = document.getElementById('previewVideo');
+      if (oldVid) oldVid.remove();
+
+      const newVid = document.createElement('video');
+      newVid.id          = 'previewVideo';
+      newVid.className   = 'preview-video';
+      newVid.autoplay    = true;
+      newVid.muted       = true;
+      newVid.loop        = true;
+      newVid.playsInline = true;
+      newVid.controls    = true; // allow manual play if autoplay blocked
+      newVid.setAttribute('playsinline', '');
+      newVid.setAttribute('webkit-playsinline', '');
+
+      const source = document.createElement('source');
+      source.src  = objectUrl;
+      source.type = capturedFiles[0]?.blob?.type || 'video/mp4';
+      newVid.appendChild(source);
+
+      // Insert before the badge
+      badge.parentNode.insertBefore(newVid, badge);
+      newVid.load();
+      newVid.play().catch(() => {});
     } else {
-      vid.style.display = 'none';
-      vid.src = '';
+      const oldVid = document.getElementById('previewVideo');
+      if (oldVid) oldVid.remove();
       badge.style.display = 'none';
       img.src = objectUrl;
       img.style.display = 'block';
@@ -1219,10 +1240,10 @@
     document.getElementById('thumbStripWrap').classList.remove('active');
     document.getElementById('previewWrap').style.display = '';
     const resetVid = document.getElementById('previewVideo');
-    resetVid.pause();
-    resetVid.removeAttribute('src');
-    resetVid.load();
-    resetVid.style.display = 'none';
+    if (resetVid) {
+      resetVid.pause();
+      resetVid.remove();
+    }
     document.getElementById('previewImg').style.display = 'block';
     document.getElementById('videoBadge').style.display = 'none';
     showScreen('cameraScreen');
