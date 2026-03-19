@@ -607,31 +607,41 @@
         return { el: tile, w: tileW, x: 0 };
       });
 
-      const n      = tiles.length;
-      const totalW = tiles.reduce((s, t) => s + t.w + GAP, 0) - GAP;
-      const canScroll = totalW > trackW;
-
-      if (!canScroll) {
-        // Not enough content to scroll — centre statically
-        let cx = (trackW - totalW) / 2;
-        tiles.forEach(t => {
-          t.el.style.left = cx + 'px';
-          t.x = cx;
-          cx += t.w + GAP;
+      // Always scroll — if tiles don't fill the screen, duplicate the photo
+      // objects (not DOM elements) until we have enough content to cover
+      // at least 2× trackW. This ensures every row scrolls continuously.
+      let allTiles = tiles.slice();
+      const basePhotos = trackPhotos.slice();
+      let safetyLimit = 0;
+      while (
+        allTiles.reduce((s, t) => s + t.w + GAP, 0) < trackW * 2 &&
+        safetyLimit++ < 20
+      ) {
+        basePhotos.forEach(p => {
+          const tile = buildTile(p);
+          tile.style.position = 'absolute';
+          tile.style.top = '0';
+          const aspect = p.isPortrait ? (3 / 4) : (4 / 3);
+          const tileW  = Math.round(trackH * aspect);
+          tile.style.width = tileW + 'px';
+          inner.appendChild(tile);
+          allTiles.push({ el: tile, w: tileW, x: 0 });
         });
-        trackStates.push({ inner, tiles, speed: SPEEDS[ti], ti, trackW, running: false });
-      } else {
-        // Spread tiles evenly across full viewport width, staggered per row
-        const cycleW   = Math.max(totalW + GAP, trackW);
-        const step     = cycleW / n;
-        const rowPhase = ti * (trackW / 3.3);
-        tiles.forEach((t, idx) => {
-          const cx = ((idx * step) + rowPhase) % cycleW;
-          t.el.style.left = cx + 'px';
-          t.x = cx;
-        });
-        trackStates.push({ inner, tiles, speed: SPEEDS[ti], ti, trackW, running: true });
       }
+
+      const totalW   = allTiles.reduce((s, t) => s + t.w + GAP, 0) - GAP;
+      const cycleW   = Math.max(totalW + GAP, trackW);
+      const n        = allTiles.length;
+      const step     = cycleW / n;
+      const rowPhase = ti * (trackW / 3.3);
+
+      allTiles.forEach((t, idx) => {
+        const cx = ((idx * step) + rowPhase) % cycleW;
+        t.el.style.left = cx + 'px';
+        t.x = cx;
+      });
+
+      trackStates.push({ inner, tiles: allTiles, speed: SPEEDS[ti], ti, trackW, running: true });
     });
 
     lastTime = null;
@@ -648,17 +658,29 @@
 
     trackStates.forEach(state => {
       if (!state.running || !state.tiles) return;
-      const { tiles, speed, trackW } = state;
+      const { tiles, speed } = state;
 
-      // Move each tile left; when it exits the left edge, recycle it
-      // to just after the current rightmost tile. This maintains even
-      // spacing regardless of how many photos there are.
+      // Step 1: move every tile left
       tiles.forEach(t => {
         t.x -= speed * dt;
-        if (t.x + t.w < 0) {
-          const maxX = Math.max(...tiles.map(o => o.x + o.w));
-          t.x = maxX + GAP;
-        }
+      });
+
+      // Step 2: collect tiles that have fully exited the left edge,
+      // sorted by their current x so we recycle left-most first
+      const toRecycle = tiles
+        .filter(t => t.x + t.w < 0)
+        .sort((a, b) => a.x - b.x);
+
+      // Step 3: recycle each one in order, placing it after the
+      // current rightmost tile (recalculated after each placement
+      // so tiles don't stack on top of each other)
+      toRecycle.forEach(t => {
+        const maxX = Math.max(...tiles.map(o => o.x + o.w));
+        t.x = maxX + GAP;
+      });
+
+      // Step 4: apply positions to DOM
+      tiles.forEach(t => {
         t.el.style.left = t.x + 'px';
       });
     });
