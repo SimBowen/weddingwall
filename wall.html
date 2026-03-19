@@ -573,79 +573,47 @@
       return;
     }
 
-    // Pre-detect portrait orientation from thumbnail dimensions.
-    // We load thumbnail images briefly (they're small) to get naturalWidth/Height.
-    // This runs in parallel for all photos before building any tiles.
+    // Pre-detect portrait/landscape for each photo by loading its thumbnail.
+    // Runs in parallel with a 3s timeout so a slow image never stalls the wall.
     await Promise.all(photos.map(p => new Promise(resolve => {
       if (p.mediaType === 'video') { p.isPortrait = false; resolve(); return; }
+      const timeout = setTimeout(() => { p.isPortrait = false; resolve(); }, 3000);
       const img = new Image();
       img.onload = () => {
+        clearTimeout(timeout);
         p.isPortrait = img.naturalHeight > img.naturalWidth;
         resolve();
       };
-      img.onerror = () => { p.isPortrait = false; resolve(); };
-      // Use thumbnail for fast load — small size
+      img.onerror = () => { clearTimeout(timeout); p.isPortrait = false; resolve(); };
       img.src = p.thumbnailUrl || p.driveUrl;
     })));
 
     const trackData = distributeTiles(photos);
-    const tileStateMap = new WeakMap(); // tile el → tile state object
-
-    // We can't rely on image load to measure widths — images may not be
-    // loaded when we position tiles. Instead we estimate tile width from
-    // the track height and a typical 4:3 aspect ratio. This gives consistent
-    // initial spread regardless of image load state.
-    // Once images load, their actual width may differ slightly, but the
-    // scroll engine corrects positions continuously via the recycle logic.
 
     innerEls.forEach((inner, ti) => {
       const trackPhotos = trackData[ti].length > 0 ? trackData[ti] : photos;
       const trackW = inner.parentElement.clientWidth;
       const trackH = inner.parentElement.clientHeight || 200;
 
-      // Build and insert tiles — width estimated per photo orientation
+      // Build tiles with per-photo width based on detected orientation
       const tiles = trackPhotos.map(p => {
         const tile = buildTile(p);
         tile.style.position = 'absolute';
         tile.style.top = '0';
-
-        // Estimate width from track height × aspect ratio.
-        // Use thumbnail URL dimensions hint if available, otherwise
-        // fall back to known orientation from the mediaType/caption field.
-        // Portrait photos are taller than wide (3:4), landscape are 4:3.
-        const isPortrait = p.isPortrait; // set below from image load
-        const aspect = isPortrait ? (3 / 4) : (4 / 3);
-        const tileW = Math.round(trackH * aspect);
+        const aspect = p.isPortrait ? (3 / 4) : (4 / 3);
+        const tileW  = Math.round(trackH * aspect);
         tile.style.width = tileW + 'px';
-
-        // Refine width once the image actually loads
-        const imgEl = tile.querySelector('img');
-        if (imgEl) {
-          imgEl.addEventListener('load', () => {
-            if (imgEl.naturalWidth && imgEl.naturalHeight) {
-              const realAspect = imgEl.naturalWidth / imgEl.naturalHeight;
-              const realW = Math.round(trackH * realAspect);
-              tile.style.width = realW + 'px';
-              // Update scroll engine's recorded width for this tile
-              const tileState = tileStateMap.get(tile);
-              if (tileState) tileState.w = realW;
-            }
-          }, { once: true });
-        }
-
         inner.appendChild(tile);
-        const state = { el: tile, w: tileW, x: 0 };
-        tileStateMap.set(tile, state);
-        return state;
+        return { el: tile, w: tileW, x: 0 };
       });
 
-      const n = tiles.length;
-      const totalEstW = n * (estimatedTileW + GAP) - GAP;
-      const canScroll = totalEstW > trackW;
+      const n      = tiles.length;
+      const totalW = tiles.reduce((s, t) => s + t.w + GAP, 0) - GAP;
+      const canScroll = totalW > trackW;
 
       if (!canScroll) {
-        // Centre statically
-        let cx = (trackW - totalEstW) / 2;
+        // Not enough content to scroll — centre statically
+        let cx = (trackW - totalW) / 2;
         tiles.forEach(t => {
           t.el.style.left = cx + 'px';
           t.x = cx;
@@ -653,24 +621,19 @@
         });
         trackStates.push({ inner, tiles, speed: SPEEDS[ti], ti, trackW, running: false });
       } else {
-        // Spread tiles evenly across the screen from the start.
-        // Use trackW as the cycle so tiles always cover the full viewport.
-        // Each row is phase-shifted by trackW/3 so rows stagger nicely.
-        const cycleW = Math.max(totalEstW + GAP, trackW);
-        const step = cycleW / n;
+        // Spread tiles evenly across full viewport width, staggered per row
+        const cycleW   = Math.max(totalW + GAP, trackW);
+        const step     = cycleW / n;
         const rowPhase = ti * (trackW / 3.3);
-
         tiles.forEach((t, idx) => {
           const cx = ((idx * step) + rowPhase) % cycleW;
           t.el.style.left = cx + 'px';
           t.x = cx;
         });
-
         trackStates.push({ inner, tiles, speed: SPEEDS[ti], ti, trackW, running: true });
       }
     });
 
-    // Start scroll loop immediately — no waiting for images
     lastTime = null;
     rafId = requestAnimationFrame(tick);
 
