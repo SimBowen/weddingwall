@@ -756,7 +756,9 @@
   // To change: run in console: crypto.subtle.digest('SHA-256', new TextEncoder().encode('your_token'))
   //   .then(b => console.log([...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')))
   const TOKEN_HASH = 'a4f8ef8ebedbe2aa7a62e4a3f0ff149a78283fdc1dc9c13f5b214d16a26475e7';
-  const MAX_RECORDING_SECS = 5; // hard cap on video length
+  const MAX_RECORDING_SECS    = 5; // hard cap on video length
+  const CLOUDINARY_CLOUD_NAME = 'dwp0nfaji';
+  const CLOUDINARY_PRESET     = 'wedding_wall';
   // ─────────────────────────────────────────────────────────
 
   // ── Helpers ───────────────────────────────────────────────
@@ -1098,27 +1100,23 @@
       });
     }
 
-    // Upload a video directly to Drive via resumable upload, then log metadata to GAS.
-    // This avoids base64 encoding large files through GAS.
-    async function uploadVideoToDrive(blob, mimeType, fileName) {
-      // Step 1: ask GAS for a resumable upload session URL
-      const initResp = await fetch(GAS_URL, {
-        method: 'POST',
-        body: JSON.stringify({ action: 'initVideoUpload', fileName, mimeType })
-      });
-      const initJson = await initResp.json();
-      if (!initJson.success) throw new Error('Could not init video upload');
-      const { uploadUrl } = initJson;
+    // Upload video directly to Cloudinary — returns a permanent CDN URL
+    async function uploadToCloudinary(blob, mimeType) {
+      const formData = new FormData();
+      formData.append('file', blob);
+      formData.append('upload_preset', CLOUDINARY_PRESET);
+      formData.append('resource_type', 'video');
 
-      // Step 2: PUT the raw video bytes to the resumable session URL
-      const uploadResp = await fetch(uploadUrl, {
-        method: 'PUT',
-        headers: { 'Content-Type': mimeType },
-        body: blob
-      });
-      if (!uploadResp.ok) throw new Error('Video upload failed');
-      const driveFile = await uploadResp.json();
-      return driveFile.id;
+      const resp = await fetch(
+        `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/video/upload`,
+        { method: 'POST', body: formData }
+      );
+      if (!resp.ok) throw new Error('Cloudinary upload failed');
+      const json = await resp.json();
+      return {
+        url:      json.secure_url,   // permanent CDN URL — plays in any <video>
+        publicId: json.public_id
+      };
     }
 
     let failed = 0;
@@ -1131,26 +1129,30 @@
       try {
         const mimeType  = blob.type || (isVideo ? 'video/mp4' : 'image/jpeg');
         const timestamp = new Date().toISOString();
-        let resp, json;
 
         if (isVideo) {
-          const ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
-          const fileName = `video_${timestamp.replace(/[:.]/g,'-')}_${name}.${ext}`;
-          const base64 = await blobToBase64(blob);
-          resp = await fetch(GAS_URL, {
+          // Step 1: upload to Cloudinary for a proper streamable CDN URL
+          const { url: videoUrl } = await uploadToCloudinary(blob, mimeType);
+          // Step 2: log metadata to GAS/Sheets (no imageData needed for video)
+          const resp = await fetch(GAS_URL, {
             method: 'POST',
-            body: JSON.stringify({ action: 'upload', name, caption, timestamp, imageData: base64, mimeType })
+            body: JSON.stringify({
+              action: 'upload',
+              name, caption, timestamp, mimeType,
+              videoUrl  // GAS stores this instead of uploading to Drive
+            })
           });
-          json = await resp.json();
+          const json = await resp.json();
+          if (!json.success) failed++;
         } else {
           const base64 = await blobToBase64(blob);
-          resp = await fetch(GAS_URL, {
+          const resp = await fetch(GAS_URL, {
             method: 'POST',
             body: JSON.stringify({ action: 'upload', name, caption, timestamp, imageData: base64, mimeType })
           });
-          json = await resp.json();
+          const json = await resp.json();
+          if (!json.success) failed++;
         }
-        if (!json.success) failed++;
       } catch (err) {
         failed++;
       }
