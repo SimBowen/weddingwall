@@ -603,6 +603,7 @@
 <div class="lightbox" id="lightbox">
   <button class="lightbox-close" id="lightboxClose">✕</button>
   <img id="lightboxImg" src="" alt="">
+  <video id="lightboxVideo" style="display:none;max-width:100%;max-height:85vh;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,0.4);" controls autoplay muted></video>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -723,9 +724,14 @@
     const time = photo.timestamp ? new Date(photo.timestamp).toLocaleString('en-SG', { dateStyle: 'short', timeStyle: 'short' }) : '';
     const captionText = photo.caption || '';
 
+    const isVideo = photo.mediaType === 'video';
     card.innerHTML = `
       <div class="card-img-wrap">
-        <img class="card-img" src="${photo.thumbnailUrl || photo.driveUrl}" alt="" loading="lazy">
+        ${isVideo
+          ? `<video class="card-img" src="${photo.driveUrl}" muted loop playsinline style="object-fit:cover;background:#111;"></video>
+             <div style="position:absolute;top:0.5rem;right:0.5rem;background:rgba(0,0,0,0.5);color:white;font-size:0.62rem;padding:0.2rem 0.55rem;border-radius:100px;letter-spacing:0.08em;z-index:4;">▶ VIDEO</div>`
+          : `<img class="card-img" src="${photo.thumbnailUrl || photo.driveUrl}" alt="" loading="lazy">`
+        }
         <div class="card-select-overlay" title="Select">
           <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
         </div>
@@ -752,8 +758,17 @@
       toggleSelect(photo.id, card);
     });
 
-    // Image click = lightbox
-    card.querySelector('.card-img').addEventListener('click', () => openLightbox(photo.driveUrl || photo.thumbnailUrl));
+    // Media click = lightbox
+    card.querySelector('.card-img').addEventListener('click', () => {
+      if (photo.mediaType === 'video') openLightboxVideo(photo.driveUrl);
+      else openLightbox(photo.driveUrl || photo.thumbnailUrl);
+    });
+    // Play video on hover
+    if (isVideo) {
+      const vid = card.querySelector('video.card-img');
+      card.querySelector('.card-img-wrap').addEventListener('mouseenter', () => vid.play());
+      card.querySelector('.card-img-wrap').addEventListener('mouseleave', () => { vid.pause(); vid.currentTime = 0; });
+    }
 
     // Action buttons
     card.querySelectorAll('.action-btn').forEach(btn => {
@@ -929,11 +944,28 @@
   }
 
   // Lightbox
-  document.getElementById('lightboxClose').addEventListener('click', () => document.getElementById('lightbox').classList.remove('active'));
-  document.getElementById('lightbox').addEventListener('click', e => { if (e.target === e.currentTarget) e.currentTarget.classList.remove('active'); });
+  function closeLightbox() {
+    document.getElementById('lightbox').classList.remove('active');
+    const vid = document.getElementById('lightboxVideo');
+    vid.pause(); vid.src = ''; vid.style.display = 'none';
+    document.getElementById('lightboxImg').style.display = 'block';
+  }
+  document.getElementById('lightboxClose').addEventListener('click', closeLightbox);
+  document.getElementById('lightbox').addEventListener('click', e => { if (e.target === e.currentTarget) closeLightbox(); });
 
   function openLightbox(url) {
-    document.getElementById('lightboxImg').src = url;
+    document.getElementById('lightboxVideo').style.display = 'none';
+    const img = document.getElementById('lightboxImg');
+    img.style.display = 'block';
+    img.src = url;
+    document.getElementById('lightbox').classList.add('active');
+  }
+
+  function openLightboxVideo(url) {
+    document.getElementById('lightboxImg').style.display = 'none';
+    const vid = document.getElementById('lightboxVideo');
+    vid.src = url;
+    vid.style.display = 'block';
     document.getElementById('lightbox').classList.add('active');
   }
 
