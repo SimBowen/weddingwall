@@ -800,12 +800,12 @@
   let facingMode    = 'environment';
   let capturedFiles = []; // array of {blob, isPortrait, isVideo}
   let cameraStarted = false;
-  let mediaRecorder    = null;
-  let recordedChunks   = [];
-  let recordingTimer   = null;
-  let recordingTimeout = null;
-  let recordingStart   = null;
-  let videoThumbUrl      = null; // still frame grabbed at recording start
+  let mediaRecorder      = null;
+  let recordedChunks     = [];
+  let recordingTimer     = null;
+  let recordingTimeout   = null;
+  let recordingStart     = null;
+  let videoThumbUrl      = null;
   let videoThumbIsPortrait = false;
 
   const videoEl    = document.getElementById('videoEl');
@@ -858,20 +858,7 @@
     if (!stream) return;
     recordedChunks = [];
 
-    // Grab a still frame NOW — before recording starts, stream is fully live
-    videoThumbUrl = null;
-    videoThumbIsPortrait = false;
-    try {
-      if (videoEl.videoWidth > 0) {
-        const c = document.createElement('canvas');
-        c.width  = videoEl.videoWidth;
-        c.height = videoEl.videoHeight;
-        c.getContext('2d').drawImage(videoEl, 0, 0);
-        videoThumbUrl = c.toDataURL('image/jpeg', 0.85);
-        videoThumbIsPortrait = videoEl.videoHeight > videoEl.videoWidth;
-      }
-    } catch(e) { videoThumbUrl = null; videoThumbIsPortrait = false; }
-    const mimeType = MediaRecorder.isTypeSupported('video/mp4')
+const mimeType = MediaRecorder.isTypeSupported('video/mp4')
       ? 'video/mp4'
       : MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
         ? 'video/webm;codecs=vp9'
@@ -925,6 +912,11 @@
     const ring = document.getElementById('countdownRing');
     ring.style.display = 'none';
     document.getElementById('countdownCircle').style.strokeDashoffset = 0;
+
+    // Navigate to submit immediately with the still — don't wait for blob
+    stopCamera();
+    capturedFiles = [{ blob: null, isPortrait: videoThumbIsPortrait, isVideo: true }];
+    showSinglePreview(null, videoThumbIsPortrait, true);
   }
 
   function updateRecordingTimer() {
@@ -937,12 +929,11 @@
   function finishRecording() {
     const mimeType = mediaRecorder.mimeType || 'video/webm';
     const blob     = new Blob(recordedChunks, { type: mimeType });
-    // Orientation already known from the still grabbed at startRecording time.
-    // Use the still thumb dimensions to determine portrait/landscape.
-    const isPortrait = videoThumbIsPortrait;
-    capturedFiles = [{ blob, isPortrait, isVideo: true }];
-    stopCamera();
-    showSinglePreview(null, isPortrait, true);
+    // Update capturedFiles with the real blob — UI is already on submit screen
+    if (capturedFiles.length > 0 && capturedFiles[0].isVideo) {
+      capturedFiles[0].blob = blob;
+      capturedFiles[0].mimeType = mimeType;
+    }
   }
 
   function captureFrame() {
