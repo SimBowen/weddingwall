@@ -600,19 +600,33 @@
             });
             state.running = false;
           } else {
-            // Distribute tiles evenly across the screen so they look spread
-            // out from the moment the wall loads. We space them across
-            // exactly trackW (one full screen width), starting from 0, so
-            // the screen is always filled. Each row is offset by a fraction
-            // of the slot width so rows don't vertically align.
-            const slotW = trackW / tiles.length;
+            // Space tiles so the gap between them is consistent and they fill
+            // the screen evenly. The scroll cycle length is the total content
+            // width (tiles + gaps). We want the tiles to appear evenly spread
+            // across the viewport at load time, then scroll left continuously.
+            //
+            // Strategy: place tiles so they are spaced `cycleW / n` apart,
+            // where cycleW is chosen to be at least trackW so the screen is
+            // always full. Each row gets a phase offset so rows are staggered.
+
+            const n = tiles.length;
+            // Cycle width: how far the belt must travel before it repeats.
+            // Must be >= trackW so the screen is always covered.
+            const cycleW = Math.max(totalW + GAP, trackW);
+            const step = cycleW / n; // distance between tile starts
+
+            // Row phase: offset each row by a different fraction of cycleW
+            // so tiles in different rows don't line up vertically.
+            const rowPhase = ti * (cycleW / 3.7);
+
             tiles.forEach((t, idx) => {
-              // Centre the tile within its slot, with a per-row phase shift
-              const rowPhase = ti * (slotW * 0.35);
-              const cx = (idx * slotW) + (slotW - t.w) / 2 + rowPhase;
+              let cx = (idx * step) + rowPhase;
+              // Wrap phase into [0, cycleW) so tiles stay on-screen at start
+              cx = cx % cycleW;
               t.el.style.left = cx + 'px';
               t.x = cx;
             });
+            state.cycleW = cycleW;
             state.running = true;
           }
 
@@ -640,12 +654,12 @@
       if (!state.running || !state.tiles) return;
       const { tiles, speed, trackW } = state;
 
+      // Move each tile left; when it exits the left edge, recycle it
+      // to just after the current rightmost tile. This maintains even
+      // spacing regardless of how many photos there are.
       tiles.forEach(t => {
         t.x -= speed * dt;
-        // When a tile fully exits the left edge, wrap it to just beyond the
-        // rightmost tile — this is the recycle step, no duplication
         if (t.x + t.w < 0) {
-          // Find the current rightmost x
           const maxX = Math.max(...tiles.map(o => o.x + o.w));
           t.x = maxX + GAP;
         }
