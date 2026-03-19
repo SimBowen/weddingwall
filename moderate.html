@@ -404,6 +404,50 @@
     letter-spacing: 0.05em;
     display: none;
   }
+
+  .btn-delete {
+    background: #fff0f0;
+    color: #b97070;
+    border: 1.5px solid #f5d0d0;
+  }
+  .btn-delete:hover { background: #b97070; color: white; border-color: #b97070; }
+
+  /* Confirm delete overlay on card */
+  .delete-confirm {
+    position: absolute;
+    inset: 0;
+    background: rgba(60,30,30,0.92);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    z-index: 20;
+    border-radius: 16px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s;
+  }
+  .delete-confirm.visible { opacity: 1; pointer-events: all; }
+  .delete-confirm p {
+    color: white; font-size: 0.8rem;
+    letter-spacing: 0.05em; text-align: center; padding: 0 1rem;
+  }
+  .delete-confirm-btns { display: flex; gap: 0.5rem; }
+  .btn-confirm-yes {
+    padding: 0.5rem 1.25rem;
+    background: #b97070; border: none; border-radius: 8px;
+    color: white; font-family: 'Jost', sans-serif;
+    font-size: 0.75rem; font-weight: 500; cursor: pointer;
+    transition: background 0.15s;
+  }
+  .btn-confirm-yes:hover { background: #9f5555; }
+  .btn-confirm-no {
+    padding: 0.5rem 1.25rem;
+    background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.3);
+    border-radius: 8px; color: white; font-family: 'Jost', sans-serif;
+    font-size: 0.75rem; font-weight: 500; cursor: pointer;
+  }
   /* ── Selection mode ─────────────────────────────── */
 
   /* Checkbox overlay on each card image */
@@ -748,6 +792,14 @@
           <button class="action-btn btn-approve ${photo.status === 'approved' ? 'active' : ''}" data-action="approve">✓ Approve</button>
           <button class="action-btn btn-reject ${photo.status === 'rejected' ? 'active' : ''}" data-action="reject">✕ Reject</button>
           <button class="action-btn btn-edit" data-action="edit">✎ Edit</button>
+          <button class="action-btn btn-delete" data-action="delete">🗑</button>
+        </div>
+        <div class="delete-confirm" id="del-${photo.id}">
+          <p>Delete this photo permanently?</p>
+          <div class="delete-confirm-btns">
+            <button class="btn-confirm-yes" data-action="delete-confirm">Delete</button>
+            <button class="btn-confirm-no" data-action="delete-cancel">Cancel</button>
+          </div>
         </div>
       </div>
     `;
@@ -770,8 +822,8 @@
       card.querySelector('.card-img-wrap').addEventListener('mouseleave', () => { vid.pause(); vid.currentTime = 0; });
     }
 
-    // Action buttons
-    card.querySelectorAll('.action-btn').forEach(btn => {
+    // Action buttons (includes delete, delete-confirm, delete-cancel)
+    card.querySelectorAll('[data-action]').forEach(btn => {
       btn.addEventListener('click', () => handleAction(btn.dataset.action, photo.id, card));
     });
 
@@ -896,6 +948,48 @@
   }
 
   async function handleAction(action, id, card) {
+    if (action === 'delete') {
+      // Show confirm overlay
+      const overlay = card.querySelector('.delete-confirm');
+      if (overlay) overlay.classList.add('visible');
+      return;
+    }
+
+    if (action === 'delete-cancel') {
+      const overlay = card.querySelector('.delete-confirm');
+      if (overlay) overlay.classList.remove('visible');
+      return;
+    }
+
+    if (action === 'delete-confirm') {
+      const overlay = card.querySelector('.delete-confirm');
+      if (overlay) {
+        overlay.innerHTML = '<p style="color:white;font-size:0.8rem;">Deleting…</p>';
+      }
+      try {
+        const resp = await fetch(GAS_URL, {
+          method: 'POST',
+          body: JSON.stringify({ action: 'delete', id })
+        });
+        const json = await resp.json();
+        if (json.success) {
+          // Remove from local array and re-render
+          allPhotos = allPhotos.filter(p => p.id !== id);
+          selectedIds.delete(id);
+          showToast('Deleted', 'success');
+          renderPhotos();
+          updateStats();
+        } else {
+          throw new Error(json.error || 'Delete failed');
+        }
+      } catch (e) {
+        showToast('Delete failed', 'error');
+        const overlay2 = card.querySelector('.delete-confirm');
+        if (overlay2) overlay2.classList.remove('visible');
+      }
+      return;
+    }
+
     if (action === 'edit') {
       const edit = card.querySelector('.caption-edit');
       const display = card.querySelector('.card-caption');
