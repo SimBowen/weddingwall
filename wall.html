@@ -556,7 +556,7 @@
     return tracks;
   }
 
-  function populateTracks(photos) {
+  async function populateTracks(photos) {
     if (rafId) { cancelAnimationFrame(rafId); rafId = null; lastTime = null; }
 
     const innerEls = [
@@ -573,7 +573,23 @@
       return;
     }
 
+    // Pre-detect portrait orientation from thumbnail dimensions.
+    // We load thumbnail images briefly (they're small) to get naturalWidth/Height.
+    // This runs in parallel for all photos before building any tiles.
+    await Promise.all(photos.map(p => new Promise(resolve => {
+      if (p.mediaType === 'video') { p.isPortrait = false; resolve(); return; }
+      const img = new Image();
+      img.onload = () => {
+        p.isPortrait = img.naturalHeight > img.naturalWidth;
+        resolve();
+      };
+      img.onerror = () => { p.isPortrait = false; resolve(); };
+      // Use thumbnail for fast load — small size
+      img.src = p.thumbnailUrl || p.driveUrl;
+    })));
+
     const trackData = distributeTiles(photos);
+    const tileStateMap = new WeakMap(); // tile el → tile state object
 
     // We can't rely on image load to measure widths — images may not be
     // loaded when we position tiles. Instead we estimate tile width from
@@ -587,18 +603,40 @@
       const trackW = inner.parentElement.clientWidth;
       const trackH = inner.parentElement.clientHeight || 200;
 
-      // Estimate tile width: assume 4:3 landscape aspect ratio
-      const estimatedTileW = Math.round(trackH * (4 / 3));
-
-      // Build and insert tiles — visible immediately, positioned correctly
+      // Build and insert tiles — width estimated per photo orientation
       const tiles = trackPhotos.map(p => {
         const tile = buildTile(p);
         tile.style.position = 'absolute';
         tile.style.top = '0';
-        // Set explicit width so portrait/landscape photos don't break spacing
-        tile.style.width = estimatedTileW + 'px';
+
+        // Estimate width from track height × aspect ratio.
+        // Use thumbnail URL dimensions hint if available, otherwise
+        // fall back to known orientation from the mediaType/caption field.
+        // Portrait photos are taller than wide (3:4), landscape are 4:3.
+        const isPortrait = p.isPortrait; // set below from image load
+        const aspect = isPortrait ? (3 / 4) : (4 / 3);
+        const tileW = Math.round(trackH * aspect);
+        tile.style.width = tileW + 'px';
+
+        // Refine width once the image actually loads
+        const imgEl = tile.querySelector('img');
+        if (imgEl) {
+          imgEl.addEventListener('load', () => {
+            if (imgEl.naturalWidth && imgEl.naturalHeight) {
+              const realAspect = imgEl.naturalWidth / imgEl.naturalHeight;
+              const realW = Math.round(trackH * realAspect);
+              tile.style.width = realW + 'px';
+              // Update scroll engine's recorded width for this tile
+              const tileState = tileStateMap.get(tile);
+              if (tileState) tileState.w = realW;
+            }
+          }, { once: true });
+        }
+
         inner.appendChild(tile);
-        return { el: tile, w: estimatedTileW, x: 0 };
+        const state = { el: tile, w: tileW, x: 0 };
+        tileStateMap.set(tile, state);
+        return state;
       });
 
       const n = tiles.length;
@@ -670,7 +708,7 @@
     if (photos !== null) {
       approvedPhotos = photos;
       photos.forEach(p => seenIds.add(p.id));
-      populateTracks(approvedPhotos);
+      populateTracks(approvedPhotos);  // async, no need to await in poll
     } else {
       populateTracks([]);
     }
@@ -686,7 +724,7 @@
       newPhotos.forEach(p => seenIds.add(p.id));
       approvedPhotos = photos;
       // Animate new tiles in
-      populateTracks(approvedPhotos);
+      populateTracks(approvedPhotos);  // async, no need to await in poll
     }
   }
 
