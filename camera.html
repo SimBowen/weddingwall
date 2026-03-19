@@ -3,7 +3,6 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<meta name="screen-orientation" content="portrait">
 <title>Bowen & Zi Qin — Wedding Camera</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400&family=Jost:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
@@ -393,25 +392,121 @@
 
   #galleryInput { display: none; }
 
-  /* Force portrait layout on screen even when device is rotated */
-  @media screen and (orientation: landscape) and (max-height: 500px) {
-    /* Phone in landscape — rotate the UI back to portrait */
-    body {
-      transform: rotate(-90deg);
-      transform-origin: left top;
-      width: 100vh;
-      height: 100vw;
-      position: fixed;
-      top: 100%;
-      left: 0;
+  /* Multi-photo thumbnail strip */
+  .thumb-strip-wrap {
+    position: relative;
+    width: 100%;
+    background: #1a1414;
+    display: none;
+    flex-direction: column;
+  }
+  .thumb-strip-wrap.active { display: flex; }
+
+  .thumb-strip {
+    display: flex;
+    gap: 3px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    height: 40vw;
+    max-height: 260px;
+    min-height: 120px;
+  }
+  .thumb-strip::-webkit-scrollbar { display: none; }
+
+  .thumb-item {
+    flex-shrink: 0;
+    height: 100%;
+    aspect-ratio: 1;
+    overflow: hidden;
+    position: relative;
+  }
+  .thumb-item img {
+    width: 100%; height: 100%;
+    object-fit: cover; display: block;
+  }
+  .thumb-count-badge {
+    position: absolute;
+    top: 0.4rem; right: 0.4rem;
+    background: rgba(0,0,0,0.55);
+    color: white;
+    font-size: 0.62rem;
+    font-weight: 500;
+    padding: 0.2rem 0.5rem;
+    border-radius: 100px;
+    letter-spacing: 0.05em;
+  }
+
+  .retake-multi {
+    position: absolute;
+    top: 0.85rem; left: 0.85rem;
+  }
+
+  /* Upload status text */
+  .upload-status {
+    font-size: 0.72rem;
+    color: var(--text-light);
+    letter-spacing: 0.05em;
+    text-align: center;
+    min-height: 1rem;
+  }
+
+
+
+  /* ── Landscape layout ───────────────────────────────────────
+     When the phone is rotated, rearrange the camera UI so
+     everything fits on screen without scrolling.
+     - Viewfinder fills the full height
+     - Controls move to the right side as a vertical strip        */
+  @media (orientation: landscape) and (max-height: 600px) {
+
+    #cameraScreen { flex-direction: row; }
+
+    .cam-topbar {
+      /* Move title to top-left corner, keep it small */
+      padding-top: calc(env(safe-area-inset-top, 0px) + 8px);
+      padding-bottom: 0.5rem;
     }
+
+    .cam-bottombar {
+      /* Become a vertical right-side strip */
+      position: absolute;
+      top: 0; right: 0; bottom: 0; left: auto;
+      width: 80px;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      padding: 1rem 0;
+      padding-right: env(safe-area-inset-right, 0px);
+      background: linear-gradient(270deg, rgba(0,0,0,0.55) 0%, transparent 100%);
+      gap: 1.25rem;
+    }
+
+    .cam-spacer { display: none; }
+
+    .shutter-btn {
+      width: 62px; height: 62px;
+    }
+    .shutter-btn::after {
+      width: 48px; height: 48px;
+    }
+
+    .gallery-btn {
+      width: 44px; height: 44px;
+    }
+
+    .flip-btn {
+      width: 36px; height: 36px;
+    }
+    .flip-btn svg { width: 15px; height: 15px; }
   }
 </style>
 </head>
 <body>
 
 <div id="flashOverlay"></div>
-<input type="file" id="galleryInput" accept="image/*">
+<input type="file" id="galleryInput" accept="image/*" multiple>
 
 <!-- ── BLOCKED ────────────────────────────────────────────── -->
 <div class="screen" id="blockedScreen">
@@ -453,11 +548,21 @@
 <div class="screen" id="submitScreen">
   <div class="submit-inner">
 
+    <!-- Single photo preview (camera capture) -->
     <div class="photo-preview-wrap landscape" id="previewWrap">
       <img id="previewImg" src="" alt="Your photo">
       <button class="retake-btn" id="retakeBtn">
         <svg viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>
         Retake
+      </button>
+    </div>
+
+    <!-- Multi-photo thumbnail strip (gallery uploads) -->
+    <div class="thumb-strip-wrap" id="thumbStripWrap">
+      <div class="thumb-strip" id="thumbStrip"></div>
+      <button class="retake-btn retake-multi" id="retakeBtnMulti">
+        <svg viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>
+        Choose again
       </button>
     </div>
 
@@ -474,12 +579,13 @@
 
       <div>
         <div class="field-label">Message <span class="field-opt">(optional)</span></div>
-        <textarea class="field-input" id="captionInput" placeholder="Write a little note…" maxlength="200"></textarea>
+        <textarea class="field-input" id="captionInput" placeholder="Write a little note… (applied to all photos)" maxlength="200"></textarea>
       </div>
 
       <div class="progress-bar" id="progressBar">
         <div class="progress-fill" id="progressFill"></div>
       </div>
+      <div class="upload-status" id="uploadStatus"></div>
 
       <button class="submit-btn" id="submitBtn">Share this moment</button>
     </div>
@@ -544,7 +650,7 @@
   // ── Camera ────────────────────────────────────────────────
   let stream        = null;
   let facingMode    = 'environment';
-  let capturedBlob  = null;
+  let capturedFiles = []; // array of {blob, isPortrait}
   let cameraStarted = false;
 
   const videoEl    = document.getElementById('videoEl');
@@ -594,13 +700,11 @@
     canvas.getContext('2d').drawImage(videoEl, 0, 0);
 
     canvas.toBlob(blob => {
-      capturedBlob = blob;
-      // If device is physically tilted landscape (detected via gyro),
-      // treat as landscape even though the stream pixels may still be portrait-locked.
       const pixelPortrait = vh > vw;
       const isPortrait = deviceIsLandscape ? false : pixelPortrait;
+      capturedFiles = [{ blob, isPortrait }];
       stopCamera();
-      goToSubmit(URL.createObjectURL(blob), isPortrait);
+      showSinglePreview(URL.createObjectURL(blob), isPortrait);
     }, 'image/jpeg', 0.92);
   }
 
@@ -610,116 +714,182 @@
   });
 
   document.getElementById('galleryInput').addEventListener('change', e => {
-    const file = e.target.files[0];
-    if (!file) return;
-    capturedBlob = file;
-    const url = URL.createObjectURL(file);
-    const img = new Image();
-    img.onload = () => {
-      // For gallery uploads, always use actual image dimensions
-      const isPortrait = img.naturalHeight > img.naturalWidth;
-      stopCamera();
-      goToSubmit(url, isPortrait);
-    };
-    img.src = url;
+    const files = Array.from(e.target.files);
+    if (!files.length) return;
+    stopCamera();
+
+    if (files.length === 1) {
+      // Single file — use the existing single-preview flow
+      const file = files[0];
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        capturedFiles = [{ blob: file, isPortrait: img.naturalHeight > img.naturalWidth }];
+        showSinglePreview(url, capturedFiles[0].isPortrait);
+      };
+      img.src = url;
+    } else {
+      // Multiple files — load all, detect orientations, show strip
+      Promise.all(files.map(file => new Promise(resolve => {
+        const url = URL.createObjectURL(file);
+        const img = new Image();
+        img.onload = () => resolve({ blob: file, isPortrait: img.naturalHeight > img.naturalWidth, url });
+        img.src = url;
+      }))).then(results => {
+        capturedFiles = results;
+        showMultiPreview(results);
+      });
+    }
     e.target.value = '';
   });
 
   // ── Submit screen ─────────────────────────────────────────
-  function goToSubmit(objectUrl, isPortrait) {
+  function showSinglePreview(objectUrl, isPortrait) {
+    document.getElementById('previewWrap').style.display = '';
+    document.getElementById('thumbStripWrap').classList.remove('active');
     document.getElementById('previewImg').src = objectUrl;
     document.getElementById('previewWrap').className =
       'photo-preview-wrap ' + (isPortrait ? 'portrait' : 'landscape');
+    goToSubmitScreen();
+  }
+
+  function showMultiPreview(results) {
+    document.getElementById('previewWrap').style.display = 'none';
+    const wrap  = document.getElementById('thumbStripWrap');
+    const strip = document.getElementById('thumbStrip');
+    strip.innerHTML = '';
+    results.forEach((r, i) => {
+      const item = document.createElement('div');
+      item.className = 'thumb-item';
+      const img = document.createElement('img');
+      img.src = r.url;
+      item.appendChild(img);
+      // Badge on first tile showing count
+      if (i === 0) {
+        const badge = document.createElement('div');
+        badge.className = 'thumb-count-badge';
+        badge.textContent = results.length + ' photos';
+        item.appendChild(badge);
+      }
+      strip.appendChild(item);
+    });
+    wrap.classList.add('active');
+    goToSubmitScreen();
+  }
+
+  function goToSubmitScreen() {
     showScreen('submitScreen');
     document.getElementById('submitScreen').scrollTop = 0;
+    // Update submit button label
+    const count = capturedFiles.length;
+    document.getElementById('submitBtn').textContent =
+      count > 1 ? `Share ${count} photos` : 'Share this moment';
   }
 
   document.getElementById('retakeBtn').addEventListener('click', () => {
-    capturedBlob = null;
+    capturedFiles = [];
     showScreen('cameraScreen');
     startCamera();
   });
 
+  document.getElementById('retakeBtnMulti').addEventListener('click', () => {
+    capturedFiles = [];
+    showScreen('cameraScreen');
+    // Trigger gallery immediately for re-selection
+    document.getElementById('galleryInput').click();
+  });
+
   document.getElementById('submitBtn').addEventListener('click', async () => {
-    if (!capturedBlob) { showToast('No photo to upload', 'error'); return; }
+    if (!capturedFiles.length) { showToast('No photo to upload', 'error'); return; }
 
     const btn          = document.getElementById('submitBtn');
     const progressBar  = document.getElementById('progressBar');
     const progressFill = document.getElementById('progressFill');
+    const statusEl     = document.getElementById('uploadStatus');
+    const total        = capturedFiles.length;
 
     btn.disabled = true;
-    btn.innerHTML = '<span class="spinner"></span>Uploading…';
     progressBar.classList.add('active');
-    progressFill.style.width = '15%';
+    progressFill.style.width = '0%';
 
     const name    = document.getElementById('nameInput').value.trim() || 'Guest';
     const caption = document.getElementById('captionInput').value.trim();
 
-    try {
-      const reader = new FileReader();
-      reader.readAsDataURL(capturedBlob);
-      reader.onload = async () => {
-        progressFill.style.width = '45%';
-        const base64    = reader.result.split(',')[1];
-        const mimeType  = capturedBlob.type || 'image/jpeg';
-        const timestamp = new Date().toISOString();
+    function blobToBase64(blob) {
+      return new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload  = () => resolve(r.result.split(',')[1]);
+        r.onerror = reject;
+        r.readAsDataURL(blob);
+      });
+    }
 
-        progressFill.style.width = '70%';
+    let failed = 0;
+    for (let i = 0; i < total; i++) {
+      const { blob } = capturedFiles[i];
+      btn.innerHTML = `<span class="spinner"></span>Uploading ${i + 1} of ${total}…`;
+      statusEl.textContent = `${i + 1} / ${total}`;
+      progressFill.style.width = ((i / total) * 100) + '%';
+
+      try {
+        const base64    = await blobToBase64(blob);
+        const mimeType  = blob.type || 'image/jpeg';
+        const timestamp = new Date().toISOString();
         const resp = await fetch(GAS_URL, {
           method: 'POST',
           body: JSON.stringify({ action: 'upload', name, caption, timestamp, imageData: base64, mimeType })
         });
         const json = await resp.json();
-        progressFill.style.width = '100%';
+        if (!json.success) failed++;
+      } catch (err) {
+        failed++;
+      }
+    }
 
-        if (json.success) {
-          setTimeout(() => {
-            showScreen('successScreen');
-            progressBar.classList.remove('active');
-            progressFill.style.width = '0%';
-            btn.disabled = false;
-            btn.innerHTML = 'Share this moment';
-          }, 300);
-        } else {
-          throw new Error(json.error || 'Upload failed');
-        }
-      };
-      reader.onerror = () => { throw new Error('Could not read file'); };
-    } catch (err) {
-      showToast('Upload failed — please try again', 'error');
-      btn.disabled = false;
-      btn.innerHTML = 'Share this moment';
+    progressFill.style.width = '100%';
+    statusEl.textContent = '';
+
+    setTimeout(() => {
       progressBar.classList.remove('active');
       progressFill.style.width = '0%';
-    }
+      btn.disabled = false;
+
+      if (failed === 0) {
+        showScreen('successScreen');
+        // Update success message for multiple
+        document.querySelector('.success-sub').innerHTML =
+          total > 1
+            ? `Your ${total} photos have been shared.<br>Look out for them on the photo wall!`
+            : 'Your photo has been shared.<br>Look out for it on the photo wall!';
+      } else if (failed < total) {
+        showToast(`${total - failed} of ${total} uploaded — ${failed} failed`, 'error');
+        btn.innerHTML = capturedFiles.length > 1 ? `Share ${total} photos` : 'Share this moment';
+      } else {
+        showToast('Upload failed — please try again', 'error');
+        btn.innerHTML = capturedFiles.length > 1 ? `Share ${total} photos` : 'Share this moment';
+      }
+    }, 300);
   });
 
   // ── Success ───────────────────────────────────────────────
   document.getElementById('anotherBtn').addEventListener('click', () => {
-    capturedBlob = null;
+    capturedFiles = [];
     document.getElementById('nameInput').value = '';
     document.getElementById('captionInput').value = '';
+    document.getElementById('thumbStrip').innerHTML = '';
+    document.getElementById('thumbStripWrap').classList.remove('active');
+    document.getElementById('previewWrap').style.display = '';
     showScreen('cameraScreen');
     startCamera();
   });
 
   // ── Boot ──────────────────────────────────────────────────
 
-  // Lock screen orientation to portrait so the UI stays upright.
-  // Works on Android Chrome; iOS Safari ignores it (handled by CSS).
-  if (screen.orientation && screen.orientation.lock) {
-    screen.orientation.lock('portrait').catch(() => {});
-  }
-
-  // Detect physical device tilt via gyroscope. Even though the screen is
-  // portrait-locked, we still want to know if the user turned the phone
-  // sideways to take a landscape photo, so we can tag it correctly.
-  let deviceIsLandscape = false;
-  if (window.DeviceOrientationEvent) {
-    window.addEventListener('deviceorientation', e => {
-      if (e.gamma !== null) deviceIsLandscape = Math.abs(e.gamma) > 50;
-    }, { passive: true });
-  }
+  // Track device orientation so captured photos are tagged correctly.
+  let deviceIsLandscape = window.innerWidth > window.innerHeight;
+  window.addEventListener('resize', () => {
+    deviceIsLandscape = window.innerWidth > window.innerHeight;
+  });
 
   initAuth();
 </script>
