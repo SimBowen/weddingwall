@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="screen-orientation" content="portrait">
 <title>Bowen & Zi Qin — Wedding Camera</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400&family=Jost:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
@@ -391,6 +392,20 @@
   @keyframes spin { to { transform: rotate(360deg); } }
 
   #galleryInput { display: none; }
+
+  /* Force portrait layout on screen even when device is rotated */
+  @media screen and (orientation: landscape) and (max-height: 500px) {
+    /* Phone in landscape — rotate the UI back to portrait */
+    body {
+      transform: rotate(-90deg);
+      transform-origin: left top;
+      width: 100vh;
+      height: 100vw;
+      position: fixed;
+      top: 100%;
+      left: 0;
+    }
+  }
 </style>
 </head>
 <body>
@@ -528,7 +543,7 @@
 
   // ── Camera ────────────────────────────────────────────────
   let stream        = null;
-  let facingMode    = 'user';
+  let facingMode    = 'environment';
   let capturedBlob  = null;
   let cameraStarted = false;
 
@@ -580,7 +595,10 @@
 
     canvas.toBlob(blob => {
       capturedBlob = blob;
-      const isPortrait = vh > vw;
+      // If device is physically tilted landscape (detected via gyro),
+      // treat as landscape even though the stream pixels may still be portrait-locked.
+      const pixelPortrait = vh > vw;
+      const isPortrait = deviceIsLandscape ? false : pixelPortrait;
       stopCamera();
       goToSubmit(URL.createObjectURL(blob), isPortrait);
     }, 'image/jpeg', 0.92);
@@ -598,6 +616,7 @@
     const url = URL.createObjectURL(file);
     const img = new Image();
     img.onload = () => {
+      // For gallery uploads, always use actual image dimensions
       const isPortrait = img.naturalHeight > img.naturalWidth;
       stopCamera();
       goToSubmit(url, isPortrait);
@@ -685,6 +704,23 @@
   });
 
   // ── Boot ──────────────────────────────────────────────────
+
+  // Lock screen orientation to portrait so the UI stays upright.
+  // Works on Android Chrome; iOS Safari ignores it (handled by CSS).
+  if (screen.orientation && screen.orientation.lock) {
+    screen.orientation.lock('portrait').catch(() => {});
+  }
+
+  // Detect physical device tilt via gyroscope. Even though the screen is
+  // portrait-locked, we still want to know if the user turned the phone
+  // sideways to take a landscape photo, so we can tag it correctly.
+  let deviceIsLandscape = false;
+  if (window.DeviceOrientationEvent) {
+    window.addEventListener('deviceorientation', e => {
+      if (e.gamma !== null) deviceIsLandscape = Math.abs(e.gamma) > 50;
+    }, { passive: true });
+  }
+
   initAuth();
 </script>
 </body>
