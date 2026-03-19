@@ -599,9 +599,49 @@
   /* Video preview on submit screen */
   .preview-video {
     width: 100%; height: 100%;
-    object-fit: contain; /* contain so portrait video shows fully, not cropped */
+    object-fit: contain;
     display: block;
     background: #111;
+  }
+
+  /* Video preview play button overlay */
+  .video-play-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
+    background: rgba(0,0,0,0.35);
+    cursor: pointer;
+    z-index: 6;
+    text-decoration: none;
+  }
+
+  .video-play-circle {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.92);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+  }
+
+  .video-play-circle svg {
+    width: 26px;
+    height: 26px;
+    fill: var(--dusty);
+    margin-left: 3px; /* optical centre */
+  }
+
+  .video-play-label {
+    font-size: 0.7rem;
+    color: white;
+    letter-spacing: 0.12em;
+    font-weight: 500;
   }
 
   .video-badge {
@@ -1040,36 +1080,37 @@
       img.style.display = 'none';
       badge.style.display = 'flex';
 
-      // Remove any existing preview video and create a fresh one.
-      // Reusing a video element with a new src causes stale-state issues
-      // on mobile browsers — a new element always starts clean.
+      // Remove any existing video preview elements
       const oldVid = document.getElementById('previewVideo');
       if (oldVid) oldVid.remove();
+      const oldOverlay = document.getElementById('videoPlayOverlay');
+      if (oldOverlay) oldOverlay.remove();
 
-      const newVid = document.createElement('video');
-      newVid.id          = 'previewVideo';
-      newVid.className   = 'preview-video';
-      newVid.muted       = true;
-      newVid.playsInline = true;
-      newVid.controls    = true;
-      newVid.setAttribute('playsinline', '');
-      newVid.setAttribute('webkit-playsinline', '');
+      // Show a play button overlay — tapping opens the video in the
+      // device's native player via a direct object URL link.
+      // This sidesteps all browser autoplay/codec restrictions entirely.
+      const overlay = document.createElement('a');
+      overlay.id   = 'videoPlayOverlay';
+      overlay.className = 'video-play-overlay';
+      overlay.href = objectUrl;
 
-      const source = document.createElement('source');
-      source.src  = objectUrl;
-      source.type = capturedFiles[0]?.blob?.type || 'video/mp4';
-      newVid.appendChild(source);
+      // On mobile, target="_blank" opens in the native video player
+      overlay.target = '_blank';
+      // Fallback: if browser opens inline, try to trigger download/open
+      overlay.setAttribute('type', capturedFiles[0]?.blob?.type || 'video/mp4');
 
-      // Insert before the badge
-      badge.parentNode.insertBefore(newVid, badge);
-      newVid.load();
-      // Play once after metadata is ready — avoids the autoplay/controls flicker
-      newVid.addEventListener('canplay', () => {
-        newVid.play().catch(() => {});
-      }, { once: true });
+      overlay.innerHTML = `
+        <div class="video-play-circle">
+          <svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        </div>
+        <span class="video-play-label">Tap to preview</span>`;
+
+      badge.parentNode.insertBefore(overlay, badge);
     } else {
       const oldVid = document.getElementById('previewVideo');
       if (oldVid) oldVid.remove();
+      const oldOverlay = document.getElementById('videoPlayOverlay');
+      if (oldOverlay) oldOverlay.remove();
       badge.style.display = 'none';
       img.src = objectUrl;
       img.style.display = 'block';
@@ -1241,10 +1282,9 @@
     document.getElementById('thumbStripWrap').classList.remove('active');
     document.getElementById('previewWrap').style.display = '';
     const resetVid = document.getElementById('previewVideo');
-    if (resetVid) {
-      resetVid.pause();
-      resetVid.remove();
-    }
+    if (resetVid) resetVid.remove();
+    const resetOverlay = document.getElementById('videoPlayOverlay');
+    if (resetOverlay) resetOverlay.remove();
     document.getElementById('previewImg').style.display = 'block';
     document.getElementById('videoBadge').style.display = 'none';
     showScreen('cameraScreen');
