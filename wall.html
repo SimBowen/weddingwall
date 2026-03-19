@@ -486,11 +486,31 @@
     tile.className = 'photo-tile';
     tile.dataset.id = photo.id;
 
-    const img = document.createElement('img');
-    img.src = photo.thumbnailUrl || photo.driveUrl;
-    img.alt = photo.name || '';
-    img.loading = 'lazy';
-    tile.appendChild(img);
+    const isVideo = photo.mediaType === 'video';
+
+    if (isVideo) {
+      // Videos autoplay muted looped — browsers allow this
+      const vid = document.createElement('video');
+      vid.src = photo.driveUrl;
+      vid.autoplay = true;
+      vid.muted = true;
+      vid.loop = true;
+      vid.playsInline = true;
+      vid.style.cssText = 'height:100%;width:auto;object-fit:cover;display:block;min-width:160px;';
+      tile.appendChild(vid);
+
+      // Small video indicator badge
+      const badge = document.createElement('div');
+      badge.style.cssText = 'position:absolute;top:0.5rem;right:0.5rem;background:rgba(0,0,0,0.45);color:white;font-size:0.58rem;padding:0.2rem 0.5rem;border-radius:100px;letter-spacing:0.08em;z-index:5;';
+      badge.textContent = '▶';
+      tile.appendChild(badge);
+    } else {
+      const img = document.createElement('img');
+      img.src = photo.thumbnailUrl || photo.driveUrl;
+      img.alt = photo.name || '';
+      img.loading = 'lazy';
+      tile.appendChild(img);
+    }
 
     if (photo.name || photo.caption) {
       const cap = document.createElement('div');
