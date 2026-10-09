@@ -146,8 +146,6 @@
   .photo-tile {
     position: absolute;
     top: 0;
-    left: 0;
-    will-change: transform;
     height: 100%;
     border-radius: 12px;
     overflow: hidden;
@@ -429,13 +427,20 @@
 
 <script>
   // ── CONFIG ──────────────────────────────────────────────────────────────
-  const API_BASE = '/api';
-  const SLUG     = (new URLSearchParams(location.search).get('slug') || 'bowen-ziqin').trim();
+  const GAS_URL = 'https://script.google.com/macros/s/AKfycbwMTZYvLpvSGnOR-FV1KJn72fQm3eyU5QqFVrSk2ri7jPiPqYcQjqPKKm-omKPWXOKC/exec';
   const POLL_INTERVAL = 15000; // ms
 
-  // Passcode is validated server-side against the registry (per-wedding,
-  // defaults to "aegis" if not set) — never compared or stored locally.
+  // SHA-256 hash of the passcode (same as moderate.html)
+  // To change: run in browser console:
+  //   crypto.subtle.digest('SHA-256', new TextEncoder().encode('your_passcode'))
+  //     .then(b => console.log([...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')))
+  const PASSCODE_HASH = 'f363ff74323b3147ac864ab0661a4a727dc39b8e91d0e27d623859366855b888';
   // ────────────────────────────────────────────────────────────────────────
+
+  async function sha256(str) {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+    return [...new Uint8Array(buf)].map(x => x.toString(16).padStart(2, '0')).join('');
+  }
 
   // ── Auth ─────────────────────────────────────────────────────────────────
   function checkLogin() { return sessionStorage.getItem('wall_auth') === 'true'; }
@@ -445,26 +450,14 @@
 
   async function doLogin() {
     const val = document.getElementById('wallPassInput').value;
-    const btn = document.getElementById('wallLoginBtn');
-    btn.disabled = true;
-    try {
-      const resp = await fetch(`${API_BASE}/mod-auth`, {
-        method: 'POST',
-        body: JSON.stringify({ slug: SLUG, passcode: val })
-      });
-      const json = await resp.json();
-      if (json.success && json.valid) {
-        sessionStorage.setItem('wall_auth', 'true');
-        document.getElementById('loginGate').classList.add('hidden');
-        init();
-      } else {
-        document.getElementById('wallLoginError').textContent = 'Incorrect passcode';
-        document.getElementById('wallPassInput').value = '';
-      }
-    } catch (e) {
-      document.getElementById('wallLoginError').textContent = 'Could not verify passcode — try again';
-    } finally {
-      btn.disabled = false;
+    const hash = await sha256(val);
+    if (hash === PASSCODE_HASH) {
+      sessionStorage.setItem('wall_auth', 'true');
+      document.getElementById('loginGate').classList.add('hidden');
+      init();
+    } else {
+      document.getElementById('wallLoginError').textContent = 'Incorrect passcode';
+      document.getElementById('wallPassInput').value = '';
     }
   }
 
@@ -479,7 +472,7 @@
 
   async function fetchPhotos() {
     try {
-      const resp = await fetch(`${API_BASE}/photo-list?mode=wall&slug=${SLUG}`);
+      const resp = await fetch(`${GAS_URL}?action=wall`);
       const json = await resp.json();
       if (json.success && json.photos) {
         return json.photos;
@@ -497,15 +490,14 @@
 
     if (isVideo) {
       const vid = document.createElement('video');
-      vid.autoplay = false;
+      vid.autoplay = true;
       vid.muted = true;
       vid.loop = true;
       vid.playsInline = true;
-      vid.preload = 'metadata';
       // Use <source> with explicit type so browser knows the codec
       // without needing correct Content-Type headers from Drive
       const src = document.createElement('source');
-      src.src = photo.rawUrl;  // video streams from R2 directly
+      src.src = videoSrc(photo.driveUrl);
       src.type = photo.mimeType || 'video/mp4';
       vid.appendChild(src);
       tile.appendChild(vid);
@@ -517,20 +509,9 @@
       tile.appendChild(badge);
     } else {
       const img = document.createElement('img');
-      img.src = photo.displayUrl;  // compressed display copy
+      img.src = photo.thumbnailUrl || photo.driveUrl;
       img.alt = photo.name || '';
       img.loading = 'lazy';
-      img.decoding = 'async';
-      // Apply EXIF rotation correction if needed
-      if (photo.rotation && photo.rotation !== 0) {
-        img.style.transform = `rotate(${photo.rotation}deg)`;
-        // For 90/270 degree rotations, swap width/height to avoid clipping
-        if (photo.rotation === 90 || photo.rotation === 270) {
-          img.style.width = '100%';
-          img.style.height = '100%';
-          img.style.objectFit = 'cover';
-        }
-      }
       tile.appendChild(img);
     }
 
@@ -556,15 +537,15 @@
   }
 
   // ── JS Scroll Engine ──────────────────────────────────────────────────────
-  // Transform-only motion avoids laying out the tiles on every frame.
-  // Short rows repeat tiles to keep the loop filled.
+  // Each track has its own state. Tiles are absolutely positioned and moved
+  // via JS each frame. No DOM duplication — each photo tile exists exactly once.
 
   const TRACK_COUNT = 3;
   const GAP = 24; // px — horizontal spacing between tiles
   // Slightly different speeds per row for visual variety
   const SPEEDS = [55, 45, 62]; // px/sec — relaxed pace for a wall display
 
-  // Track state: array of { tiles: [{el, x, w, video, visible}], totalW, running, speed }
+  // Track state: array of { tiles: [{el, x, w}], totalW, running, speed }
   const trackStates = [];
   let rafId = null;
   let lastTime = null;
@@ -573,51 +554,6 @@
     const tracks = [[], [], []];
     photos.forEach((p, i) => { tracks[i % 3].push(p); });
     return tracks;
-  }
-
-  // Read EXIF orientation from a JPEG blob/url to detect rotation.
-  // Returns degrees to rotate (0, 90, 180, 270) or 0 if unreadable.
-  async function getExifRotation(url) {
-    try {
-      const resp = await fetch(url);
-      const buf  = await resp.arrayBuffer();
-      const view = new DataView(buf);
-      // Check JPEG SOI marker
-      if (view.getUint16(0) !== 0xFFD8) return 0;
-      let offset = 2;
-      while (offset < view.byteLength) {
-        const marker = view.getUint16(offset);
-        offset += 2;
-        if (marker === 0xFFE1) { // APP1 — EXIF
-          const exifOffset = offset + 2;
-          // Check "Exif" header
-          const exifHeader = String.fromCharCode(
-            view.getUint8(exifOffset), view.getUint8(exifOffset+1),
-            view.getUint8(exifOffset+2), view.getUint8(exifOffset+3)
-          );
-          if (exifHeader !== 'Exif') return 0;
-          const tiffOffset = exifOffset + 6;
-          const littleEndian = view.getUint16(tiffOffset) === 0x4949;
-          const getUint16 = (o) => view.getUint16(tiffOffset + o, littleEndian);
-          const getUint32 = (o) => view.getUint32(tiffOffset + o, littleEndian);
-          const ifdOffset = getUint32(4);
-          const entries   = getUint16(ifdOffset);
-          for (let i = 0; i < entries; i++) {
-            const tag = getUint16(ifdOffset + 2 + i * 12);
-            if (tag === 0x0112) { // Orientation tag
-              const orientation = getUint16(ifdOffset + 2 + i * 12 + 8);
-              // EXIF orientation → CSS rotation degrees
-              const map = { 1:0, 3:180, 6:90, 8:270 };
-              return map[orientation] || 0;
-            }
-          }
-          return 0;
-        }
-        if ((marker & 0xFF00) !== 0xFF00) break;
-        offset += view.getUint16(offset);
-      }
-    } catch(e) {}
-    return 0;
   }
 
   async function populateTracks(photos) {
@@ -637,37 +573,19 @@
       return;
     }
 
-    // Pre-detect portrait/landscape for each photo/video.
-    // Images: load thumbnail and check naturalHeight > naturalWidth.
-    // Videos: load metadata from the video element and check videoHeight > videoWidth.
-    // All run in parallel with a 4s timeout so a slow asset never stalls the wall.
+    // Pre-detect portrait/landscape for each photo by loading its thumbnail.
+    // Runs in parallel with a 3s timeout so a slow image never stalls the wall.
     await Promise.all(photos.map(p => new Promise(resolve => {
-      const timeout = setTimeout(() => { p.isPortrait = false; resolve(); }, 4000);
-
-      if (p.mediaType === 'video') {
-        const vid = document.createElement('video');
-        vid.muted = true;
-        vid.preload = 'metadata';
-        vid.onloadedmetadata = () => {
-          clearTimeout(timeout);
-          p.isPortrait = vid.videoHeight > vid.videoWidth;
-          vid.src = '';
-          resolve();
-        };
-        vid.onerror = () => { clearTimeout(timeout); p.isPortrait = false; resolve(); };
-        vid.src = p.rawUrl;
-      } else {
-        const img = new Image();
-        img.onload = async () => {
-          clearTimeout(timeout);
-          p.isPortrait = img.naturalHeight > img.naturalWidth;
-          // Read EXIF rotation — some phones store upside-down in pixel data
-          p.rotation = await getExifRotation(p.displayUrl);
-          resolve();
-        };
-        img.onerror = () => { clearTimeout(timeout); p.isPortrait = false; p.rotation = 0; resolve(); };
-        img.src = p.displayUrl;
-      }
+      if (p.mediaType === 'video') { p.isPortrait = false; resolve(); return; }
+      const timeout = setTimeout(() => { p.isPortrait = false; resolve(); }, 3000);
+      const img = new Image();
+      img.onload = () => {
+        clearTimeout(timeout);
+        p.isPortrait = img.naturalHeight > img.naturalWidth;
+        resolve();
+      };
+      img.onerror = () => { clearTimeout(timeout); p.isPortrait = false; resolve(); };
+      img.src = p.thumbnailUrl || p.driveUrl;
     })));
 
     const trackData = distributeTiles(photos);
@@ -686,7 +604,7 @@
         const tileW  = Math.round(trackH * aspect);
         tile.style.width = tileW + 'px';
         inner.appendChild(tile);
-        return { el: tile, w: tileW, x: 0, video: tile.querySelector('video'), visible: false };
+        return { el: tile, w: tileW, x: 0 };
       });
 
       // Duplicate tiles until content fills at least 2× trackW
@@ -706,7 +624,7 @@
           const tileW  = Math.round(trackH * aspect);
           tile.style.width = tileW + 'px';
           inner.appendChild(tile);
-          allTiles.push({ el: tile, w: tileW, x: 0, video: tile.querySelector('video'), visible: false });
+          allTiles.push({ el: tile, w: tileW, x: 0 });
         });
       }
 
@@ -716,15 +634,14 @@
       const avgTileW = allTiles.reduce((s, t) => s + t.w, 0) / allTiles.length;
       const rowOffset = ti * (avgTileW * 0.6); // safe: less than one tile width
 
-      let cx = -rowOffset;
+      let cx = rowOffset;
       allTiles.forEach(t => {
-        t.el.style.transform = `translate3d(${cx}px, 0, 0)`;
+        t.el.style.left = cx + 'px';
         t.x = cx;
         cx += t.w + GAP;
       });
 
-      const totalW = allTiles.reduce((sum, t) => sum + t.w + GAP, 0);
-      trackStates.push({ inner, tiles: allTiles, totalW, speed: SPEEDS[ti], ti, trackW, running: true });
+      trackStates.push({ inner, tiles: allTiles, speed: SPEEDS[ti], ti, trackW, running: true });
     });
 
     lastTime = null;
@@ -736,42 +653,40 @@
   }
 
   function tick(now) {
-    const dt = lastTime !== null ? Math.min((now - lastTime) / 1000, 0.05) : 0;
+    const dt = lastTime ? Math.min((now - lastTime) / 1000, 0.05) : 0;
     lastTime = now;
 
     trackStates.forEach(state => {
       if (!state.running || !state.tiles) return;
-      const { tiles, speed, totalW, trackW } = state;
+      const { tiles, speed } = state;
+
+      // Step 1: move every tile left
       tiles.forEach(t => {
         t.x -= speed * dt;
-        // One cycle puts a tile behind its predecessor without searching the row.
-        if (t.x + t.w < 0) t.x += totalW;
-        t.el.style.transform = `translate3d(${t.x}px, 0, 0)`;
+      });
 
-        const visible = t.x < trackW && t.x + t.w > 0;
-        if (t.video && visible !== t.visible) {
-          t.visible = visible;
-          if (visible) t.video.play().catch(() => {});
-          else t.video.pause();
-        }
+      // Step 2: collect tiles that have fully exited the left edge,
+      // sorted by their current x so we recycle left-most first
+      const toRecycle = tiles
+        .filter(t => t.x + t.w < 0)
+        .sort((a, b) => a.x - b.x);
+
+      // Step 3: recycle each one in order, placing it after the
+      // current rightmost tile (recalculated after each placement
+      // so tiles don't stack on top of each other)
+      toRecycle.forEach(t => {
+        const maxX = Math.max(...tiles.map(o => o.x + o.w));
+        t.x = maxX + GAP;
+      });
+
+      // Step 4: apply positions to DOM
+      tiles.forEach(t => {
+        t.el.style.left = t.x + 'px';
       });
     });
 
     rafId = requestAnimationFrame(tick);
   }
-
-  document.addEventListener('visibilitychange', () => {
-    lastTime = null;
-    if (document.hidden) {
-      if (rafId !== null) cancelAnimationFrame(rafId);
-      rafId = null;
-      trackStates.forEach(state => state.tiles.forEach(t => {
-        if (t.video) { t.video.pause(); t.visible = false; }
-      }));
-    } else if (rafId === null && trackStates.length) {
-      rafId = requestAnimationFrame(tick);
-    }
-  });
 
   async function init() {
     const photos = await fetchPhotos();
@@ -803,7 +718,18 @@
 
   // Normalise Drive URLs for video — the uc?export=view format doesn't stream
   // reliably in <video> tags. Convert to lh3.googleusercontent.com/d/FILE_ID.
-
+  function videoSrc(url) {
+    if (!url) return '';
+    // Extract Drive file ID from any Drive URL format
+    const m = url.match(/[?&]id=([a-zA-Z0-9_-]+)/)
+           || url.match(/\/d\/([a-zA-Z0-9_-]+)/)
+           || url.match(/lh3\.googleusercontent\.com\/d\/([a-zA-Z0-9_-]+)/);
+    if (m) {
+      // export=download works for "anyone with link" files without requiring sign-in
+      return `https://drive.google.com/uc?export=download&id=${m[1]}`;
+    }
+    return url;
+  }
 </script>
 </body>
 </html>
