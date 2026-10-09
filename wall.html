@@ -146,6 +146,8 @@
   .photo-tile {
     position: absolute;
     top: 0;
+    left: 0;
+    will-change: transform;
     height: 100%;
     border-radius: 12px;
     overflow: hidden;
@@ -490,10 +492,11 @@
 
     if (isVideo) {
       const vid = document.createElement('video');
-      vid.autoplay = true;
+      vid.autoplay = false;
       vid.muted = true;
       vid.loop = true;
       vid.playsInline = true;
+      vid.preload = 'metadata';
       // Use <source> with explicit type so browser knows the codec
       // without needing correct Content-Type headers from Drive
       const src = document.createElement('source');
@@ -512,6 +515,7 @@
       img.src = photo.thumbnailUrl || photo.driveUrl;
       img.alt = photo.name || '';
       img.loading = 'lazy';
+      img.decoding = 'async';
       tile.appendChild(img);
     }
 
@@ -537,15 +541,15 @@
   }
 
   // ── JS Scroll Engine ──────────────────────────────────────────────────────
-  // Each track has its own state. Tiles are absolutely positioned and moved
-  // via JS each frame. No DOM duplication — each photo tile exists exactly once.
+  // Transform-only motion avoids laying out the tiles on every frame.
+  // Short rows repeat tiles to keep the loop filled.
 
   const TRACK_COUNT = 3;
   const GAP = 24; // px — horizontal spacing between tiles
   // Slightly different speeds per row for visual variety
   const SPEEDS = [55, 45, 62]; // px/sec — relaxed pace for a wall display
 
-  // Track state: array of { tiles: [{el, x, w}], totalW, running, speed }
+  // Track state: array of { tiles: [{el, x, w, video, visible}], totalW, running, speed }
   const trackStates = [];
   let rafId = null;
   let lastTime = null;
@@ -604,7 +608,7 @@
         const tileW  = Math.round(trackH * aspect);
         tile.style.width = tileW + 'px';
         inner.appendChild(tile);
-        return { el: tile, w: tileW, x: 0 };
+        return { el: tile, w: tileW, x: 0, video: tile.querySelector('video'), visible: false };
       });
 
       // Duplicate tiles until content fills at least 2× trackW
@@ -624,7 +628,7 @@
           const tileW  = Math.round(trackH * aspect);
           tile.style.width = tileW + 'px';
           inner.appendChild(tile);
-          allTiles.push({ el: tile, w: tileW, x: 0 });
+          allTiles.push({ el: tile, w: tileW, x: 0, video: tile.querySelector('video'), visible: false });
         });
       }
 
@@ -634,14 +638,15 @@
       const avgTileW = allTiles.reduce((s, t) => s + t.w, 0) / allTiles.length;
       const rowOffset = ti * (avgTileW * 0.6); // safe: less than one tile width
 
-      let cx = rowOffset;
+      let cx = -rowOffset;
       allTiles.forEach(t => {
-        t.el.style.left = cx + 'px';
+        t.el.style.transform = `translate3d(${cx}px, 0, 0)`;
         t.x = cx;
         cx += t.w + GAP;
       });
 
-      trackStates.push({ inner, tiles: allTiles, speed: SPEEDS[ti], ti, trackW, running: true });
+      const totalW = allTiles.reduce((sum, t) => sum + t.w + GAP, 0);
+      trackStates.push({ inner, tiles: allTiles, totalW, speed: SPEEDS[ti], ti, trackW, running: true });
     });
 
     lastTime = null;
@@ -653,40 +658,42 @@
   }
 
   function tick(now) {
-    const dt = lastTime ? Math.min((now - lastTime) / 1000, 0.05) : 0;
+    const dt = lastTime !== null ? Math.min((now - lastTime) / 1000, 0.05) : 0;
     lastTime = now;
 
     trackStates.forEach(state => {
       if (!state.running || !state.tiles) return;
-      const { tiles, speed } = state;
-
-      // Step 1: move every tile left
+      const { tiles, speed, totalW, trackW } = state;
       tiles.forEach(t => {
         t.x -= speed * dt;
-      });
+        // One cycle puts a tile behind its predecessor without searching the row.
+        if (t.x + t.w < 0) t.x += totalW;
+        t.el.style.transform = `translate3d(${t.x}px, 0, 0)`;
 
-      // Step 2: collect tiles that have fully exited the left edge,
-      // sorted by their current x so we recycle left-most first
-      const toRecycle = tiles
-        .filter(t => t.x + t.w < 0)
-        .sort((a, b) => a.x - b.x);
-
-      // Step 3: recycle each one in order, placing it after the
-      // current rightmost tile (recalculated after each placement
-      // so tiles don't stack on top of each other)
-      toRecycle.forEach(t => {
-        const maxX = Math.max(...tiles.map(o => o.x + o.w));
-        t.x = maxX + GAP;
-      });
-
-      // Step 4: apply positions to DOM
-      tiles.forEach(t => {
-        t.el.style.left = t.x + 'px';
+        const visible = t.x < trackW && t.x + t.w > 0;
+        if (t.video && visible !== t.visible) {
+          t.visible = visible;
+          if (visible) t.video.play().catch(() => {});
+          else t.video.pause();
+        }
       });
     });
 
     rafId = requestAnimationFrame(tick);
   }
+
+  document.addEventListener('visibilitychange', () => {
+    lastTime = null;
+    if (document.hidden) {
+      if (rafId !== null) cancelAnimationFrame(rafId);
+      rafId = null;
+      trackStates.forEach(state => state.tiles.forEach(t => {
+        if (t.video) { t.video.pause(); t.visible = false; }
+      }));
+    } else if (rafId === null && trackStates.length) {
+      rafId = requestAnimationFrame(tick);
+    }
+  });
 
   async function init() {
     const photos = await fetchPhotos();
